@@ -253,7 +253,7 @@ For game scores queries, the structured_data should match this format:
 
 For player stats queries, the structured_data should match this format:
 {
-    "player_name": "string",
+    "name": "string",
     "position": "PG|SG|SF|PF|C",
     "team": "string",
     "league": "NBA",
@@ -271,7 +271,7 @@ For player stats queries, the structured_data should match this format:
 
 For team analysis queries, the structured_data should match this format:
 {
-    "team_name": "string",
+    "name": "string",
     "league": "NBA",
     "season": "2023-24",
     "wins": 45,
@@ -320,10 +320,10 @@ def parse_and_validate_response(response_text: str, query_type: str) -> SportsAn
                 logger.info(f"✅ Game data validated: {game_data.home_team} vs {game_data.away_team}")
             elif query_type == "player_stats":
                 player_data = PlayerPerformance(**sports_response.structured_data)
-                logger.info(f"✅ Player data validated: {player_data.player_name} - {player_data.position}")
+                logger.info(f"✅ Player data validated: {player_data.name} - {player_data.position}")
             elif query_type == "team_analysis":
                 team_data = TeamAnalysis(**sports_response.structured_data)
-                logger.info(f"✅ Team data validated: {team_data.team_name} - {team_data.league}")
+                logger.info(f"✅ Team data validated: {team_data.name} - {team_data.league}")
         
         logger.info("🎉 All Pydantic validation passed!")
         return sports_response
@@ -659,7 +659,10 @@ async def process_sports_query(kernel: Kernel, query: str) -> SportsAnalysisResp
             structured_data=None,
             tools_used=[],
             confidence_score=0.0,
-            follow_up_suggestions=["Please try rephrasing your question", "Contact support if the issue persists"]
+            follow_up_suggestions=["Please try rephrasing your question", "Contact support if the issue persists"],
+            predictions=[],
+            comparable_players=[],
+            historical_context=None
         )
 
 
