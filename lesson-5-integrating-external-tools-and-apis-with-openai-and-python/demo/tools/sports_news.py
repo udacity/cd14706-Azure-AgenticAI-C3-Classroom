@@ -2,8 +2,10 @@
 from semantic_kernel.functions import kernel_function
 import requests
 import logging
+import os
 from typing import Dict, Any, List
 from datetime import datetime, timedelta
+import feedparser
 
 logger = logging.getLogger(__name__)
 
@@ -11,15 +13,56 @@ class SportsNewsTools:
     """Tools for sports news aggregation using external APIs"""
     
     def __init__(self):
-        # Using external sports news APIs
-        self.news_api_base = "https://api.sportsnews.com"
-        self.espn_api_base = "https://api.espn.com"
-        self.bleacher_report_api = "https://api.bleacherreport.com"
+        # Using NewsAPI for sports news (free tier available)
+        self.newsapi_key = os.getenv("NEWSAPI_KEY", "")
+        self.newsapi_base = "https://newsapi.org/v2"
+        
+        # RSS feeds as fallback
+        self.rss_feeds = {
+            "NBA": "https://www.espn.com/espn/rss/nba/news",
+            "NFL": "https://www.espn.com/espn/rss/nfl/news",
+            "MLB": "https://www.espn.com/espn/rss/mlb/news",
+            "NHL": "https://www.espn.com/espn/rss/nhl/news"
+        }
+    
+    def _get_news_from_rss(self, league: str, team: str = None, limit: int = 5) -> List[Dict[str, Any]]:
+        """Get news from RSS feed as fallback"""
+        articles = []
+        feed_url = self.rss_feeds.get(league.upper())
+        
+        if not feed_url:
+            return articles
+        
+        try:
+            feed = feedparser.parse(feed_url)
+            for entry in feed.entries[:limit * 2]:  # Get more to filter by team
+                if team:
+                    if team.lower() not in entry.title.lower() and team.lower() not in entry.get("summary", "").lower():
+                        continue
+                
+                article = {
+                    "title": entry.title,
+                    "summary": entry.get("summary", entry.get("description", ""))[:200],
+                    "content": entry.get("summary", entry.get("description", "")),
+                    "author": entry.get("author", "ESPN"),
+                    "source": "ESPN",
+                    "published_date": entry.get("published", ""),
+                    "url": entry.link,
+                    "tags": [league, team] if team else [league]
+                }
+                articles.append(article)
+                
+                if len(articles) >= limit:
+                    break
+        except Exception as e:
+            logger.warning(f"RSS feed parsing failed: {e}")
+        
+        return articles
     
     @kernel_function(name="get_latest_news", description="Get latest sports news using external news API")
     def get_latest_news(self, league: str = "NBA", team: str = None, limit: int = 5) -> Dict[str, Any]:
         """
-        Get latest sports news using external news API.
+        Get latest sports news using NewsAPI or RSS feeds.
         
         Args:
             league: Sports league (NBA, NFL, MLB, NHL, etc.)
@@ -30,127 +73,72 @@ class SportsNewsTools:
             Dictionary containing sports news information
         """
         try:
-            logger.info(f"Getting latest sports news via external API for league: {league}, team: {team}")
+            logger.info(f"Getting latest sports news from real API for league: {league}, team: {team}")
             
-            # Simulate API call to sports news service
-            # In a real implementation, this would call actual news APIs
-            news_api_response = {
-                "status": "success",
-                "timestamp": "2024-01-15T12:00:00Z",
-                "league": league,
-                "team": team,
-                "news_data": {
-                    "total_articles": 25,
-                    "articles": [
-                        {
-                            "article_id": "NEWS-001",
-                            "title": "Lakers Dominate Warriors in High-Scoring Affair",
-                            "summary": "The Los Angeles Lakers put on an offensive clinic against the Golden State Warriors, winning 120-115 in a thrilling matchup.",
-                            "content": "LeBron James led the Lakers with 32 points, 8 rebounds, and 7 assists as the Lakers improved their record to 25-15. Stephen Curry scored 28 points for the Warriors, but it wasn't enough to overcome the Lakers' balanced attack.",
-                            "author": "Sports Reporter",
-                            "source": "ESPN",
-                            "published_date": "2024-01-15T10:30:00Z",
-                            "url": "https://espn.com/nba/story/lakers-warriors",
-                            "image_url": "https://espn.com/images/lakers-warriors.jpg",
-                            "tags": ["NBA", "Lakers", "Warriors", "LeBron James", "Stephen Curry"],
-                            "sentiment": "positive",
-                            "relevance_score": 0.95
-                        },
-                        {
-                            "article_id": "NEWS-002",
-                            "title": "Lakers Sign Free Agent Center to 10-Day Contract",
-                            "summary": "The Lakers have signed veteran center Marcus Johnson to a 10-day contract to bolster their frontcourt depth.",
-                            "content": "The 6'11\" center brings experience and defensive presence to a Lakers team looking to make a playoff push. Johnson previously played for the Miami Heat and has career averages of 8.2 points and 6.1 rebounds per game.",
-                            "author": "Beat Reporter",
-                            "source": "Bleacher Report",
-                            "published_date": "2024-01-15T09:15:00Z",
-                            "url": "https://bleacherreport.com/lakers-sign-johnson",
-                            "image_url": "https://bleacherreport.com/images/johnson.jpg",
-                            "tags": ["NBA", "Lakers", "Free Agency", "Marcus Johnson"],
-                            "sentiment": "neutral",
-                            "relevance_score": 0.78
-                        },
-                        {
-                            "article_id": "NEWS-003",
-                            "title": "Lakers Coach Praises Team's Defensive Improvement",
-                            "summary": "Head coach Darvin Ham highlighted the team's defensive improvements in recent games during his post-game press conference.",
-                            "content": "The Lakers have held their last three opponents under 110 points, showing significant improvement on the defensive end. Ham credited the team's communication and effort for the turnaround.",
-                            "author": "Team Reporter",
-                            "source": "Lakers.com",
-                            "published_date": "2024-01-15T08:45:00Z",
-                            "url": "https://lakers.com/news/defensive-improvement",
-                            "image_url": "https://lakers.com/images/ham-press.jpg",
-                            "tags": ["NBA", "Lakers", "Defense", "Darvin Ham"],
-                            "sentiment": "positive",
-                            "relevance_score": 0.82
-                        },
-                        {
-                            "article_id": "NEWS-004",
-                            "title": "Lakers Rookie Shows Promise in Limited Minutes",
-                            "summary": "First-year player Jalen Williams impressed in his 12 minutes of action, showing flashes of potential for the future.",
-                            "content": "The 19th overall pick scored 8 points and grabbed 4 rebounds in limited action, showing good court awareness and basketball IQ. The coaching staff is optimistic about his development.",
-                            "author": "Rookie Reporter",
-                            "source": "NBA.com",
-                            "published_date": "2024-01-15T07:20:00Z",
-                            "url": "https://nba.com/lakers/rookie-williams",
-                            "image_url": "https://nba.com/images/williams.jpg",
-                            "tags": ["NBA", "Lakers", "Rookie", "Jalen Williams"],
-                            "sentiment": "positive",
-                            "relevance_score": 0.65
-                        },
-                        {
-                            "article_id": "NEWS-005",
-                            "title": "Lakers Injury Report: Key Players Status for Next Game",
-                            "summary": "The Lakers released their injury report for tomorrow's game against the Clippers, with several players listed as questionable.",
-                            "content": "Anthony Davis is listed as questionable with a minor ankle sprain, while Austin Reaves is probable after missing the last game. The team is optimistic both players will be available.",
-                            "author": "Injury Reporter",
-                            "source": "The Athletic",
-                            "published_date": "2024-01-15T06:30:00Z",
-                            "url": "https://theathletic.com/lakers-injury-report",
-                            "image_url": "https://theathletic.com/images/injury-report.jpg",
-                            "tags": ["NBA", "Lakers", "Injuries", "Anthony Davis", "Austin Reaves"],
-                            "sentiment": "neutral",
-                            "relevance_score": 0.88
-                        }
-                    ],
-                    "trending_topics": [
-                        "Lakers Playoff Push",
-                        "LeBron James MVP Race",
-                        "Anthony Davis Health",
-                        "Lakers Defense",
-                        "Rookie Development"
-                    ],
-                    "news_summary": {
-                        "positive_articles": 3,
-                        "neutral_articles": 2,
-                        "negative_articles": 0,
-                        "average_sentiment": 0.75,
-                        "key_themes": ["Victory", "Signings", "Defense", "Development", "Health"]
+            articles = []
+            
+            # Try NewsAPI first if key is available
+            if self.newsapi_key:
+                try:
+                    search_query = f"{league} {team}" if team else league
+                    newsapi_url = f"{self.newsapi_base}/everything"
+                    params = {
+                        "q": search_query,
+                        "language": "en",
+                        "sortBy": "publishedAt",
+                        "pageSize": limit,
+                        "apiKey": self.newsapi_key
                     }
+                    
+                    resp = requests.get(newsapi_url, params=params, timeout=10)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    
+                    if data.get("status") == "ok" and data.get("articles"):
+                        for article in data["articles"][:limit]:
+                            articles.append({
+                                "title": article.get("title", ""),
+                                "summary": article.get("description", "")[:200],
+                                "content": article.get("content", article.get("description", "")),
+                                "author": article.get("author", article.get("source", {}).get("name", "Unknown")),
+                                "source": article.get("source", {}).get("name", "Unknown"),
+                                "published_date": article.get("publishedAt", ""),
+                                "url": article.get("url", ""),
+                                "image_url": article.get("urlToImage", ""),
+                                "tags": [league, team] if team else [league]
+                            })
+                except Exception as e:
+                    logger.warning(f"NewsAPI request failed: {e}, falling back to RSS")
+            
+            # Fallback to RSS feeds if NewsAPI fails or no key
+            if not articles:
+                articles = self._get_news_from_rss(league, team, limit)
+            
+            if not articles:
+                # Return empty result with helpful message
+                return {
+                    "api_source": "NewsAPI / RSS Feeds",
+                    "news_data": {
+                        "total_articles": 0,
+                        "articles": [],
+                        "message": f"No news found for {league}" + (f" and {team}" if team else "")
+                    }
+                }
+            
+            return {
+                "api_source": "NewsAPI / RSS Feeds",
+                "news_data": {
+                    "total_articles": len(articles),
+                    "articles": articles[:limit],
+                    "league": league,
+                    "team": team
                 }
             }
             
-            # Filter by team if specified
-            if team:
-                filtered_articles = []
-                for article in news_api_response["news_data"]["articles"]:
-                    if team.lower() in article["title"].lower() or team.lower() in article["summary"].lower():
-                        filtered_articles.append(article)
-                news_api_response["news_data"]["articles"] = filtered_articles[:limit]
-            else:
-                news_api_response["news_data"]["articles"] = news_api_response["news_data"]["articles"][:limit]
-            
-            return {
-                "api_source": "Sports News Aggregation API",
-                "api_endpoint": f"{self.news_api_base}/v1/news",
-                "news_data": news_api_response["news_data"]
-            }
-            
         except Exception as e:
-            logger.error(f"❌ Failed to get sports news via external API: {e}")
+            logger.error(f"❌ Failed to get sports news: {e}")
             return {
-                "api_source": "Sports News Aggregation API",
-                "api_endpoint": f"{self.news_api_base}/v1/news",
+                "api_source": "NewsAPI / RSS Feeds",
                 "news_data": {
                     "league": league,
                     "team": team,
@@ -171,41 +159,62 @@ class SportsNewsTools:
             Dictionary containing breaking news information
         """
         try:
-            logger.info(f"Getting breaking sports news via external API for league: {league}")
+            logger.info(f"Getting breaking sports news from real API for league: {league}")
             
-            # Simulate API call to breaking news service
-            breaking_news_response = {
-                "status": "success",
-                "timestamp": "2024-01-15T12:00:00Z",
-                "league": league,
+            # Get latest news and filter for breaking/urgent items
+            latest_news = self.get_latest_news(league, limit=10)
+            articles = latest_news.get("news_data", {}).get("articles", [])
+            
+            # Filter for breaking news (recent articles, typically within last hour)
+            breaking_articles = []
+            cutoff_time = datetime.now() - timedelta(hours=2)
+            
+            for article in articles:
+                try:
+                    pub_date_str = article.get("published_date", "")
+                    if pub_date_str:
+                        # Try to parse various date formats
+                        pub_date = None
+                        for fmt in ["%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S%z", "%a, %d %b %Y %H:%M:%S %Z"]:
+                            try:
+                                pub_date = datetime.strptime(pub_date_str, fmt)
+                                break
+                            except:
+                                continue
+                        
+                        if pub_date and pub_date >= cutoff_time:
+                            breaking_articles.append({
+                                "title": article.get("title", ""),
+                                "summary": article.get("summary", ""),
+                                "priority": "high",
+                                "published_date": pub_date_str,
+                                "source": article.get("source", ""),
+                                "url": article.get("url", "")
+                            })
+                except:
+                    # If date parsing fails, include it anyway (might be recent)
+                    breaking_articles.append({
+                        "title": article.get("title", ""),
+                        "summary": article.get("summary", ""),
+                        "priority": "high",
+                        "published_date": article.get("published_date", ""),
+                        "source": article.get("source", ""),
+                        "url": article.get("url", "")
+                    })
+            
+            return {
+                "api_source": "NewsAPI / RSS Feeds",
                 "breaking_news": {
-                    "urgent_articles": [
-                        {
-                            "article_id": "BREAKING-001",
-                            "title": "BREAKING: Major Trade Shakes Up NBA Landscape",
-                            "summary": "A blockbuster trade involving multiple All-Stars has been completed, significantly altering the playoff picture.",
-                            "priority": "high",
-                            "published_date": "2024-01-15T11:45:00Z",
-                            "source": "ESPN",
-                            "url": "https://espn.com/breaking-trade"
-                        }
-                    ],
-                    "alert_level": "high",
-                    "last_updated": "2024-01-15T11:45:00Z"
+                    "urgent_articles": breaking_articles[:5],
+                    "alert_level": "high" if breaking_articles else "normal",
+                    "last_updated": datetime.now().isoformat()
                 }
             }
             
-            return {
-                "api_source": "Breaking Sports News API",
-                "api_endpoint": f"{self.news_api_base}/v1/breaking",
-                "breaking_news": breaking_news_response["breaking_news"]
-            }
-            
         except Exception as e:
-            logger.error(f"❌ Failed to get breaking sports news via external API: {e}")
+            logger.error(f"❌ Failed to get breaking sports news: {e}")
             return {
-                "api_source": "Breaking Sports News API",
-                "api_endpoint": f"{self.news_api_base}/v1/breaking",
+                "api_source": "NewsAPI / RSS Feeds",
                 "breaking_news": {
                     "league": league,
                     "error": f"API call failed: {e}",
@@ -227,46 +236,72 @@ class SportsNewsTools:
             Dictionary containing search results
         """
         try:
-            logger.info(f"Searching sports news via external API for query: {query}")
+            logger.info(f"Searching sports news from real API for query: {query}, league: {league}")
             
-            # Simulate API call to news search service
-            search_response = {
-                "status": "success",
-                "timestamp": "2024-01-15T12:00:00Z",
-                "query": query,
-                "league": league,
-                "search_results": {
-                    "total_results": 12,
-                    "articles": [
-                        {
-                            "article_id": "SEARCH-001",
-                            "title": f"Lakers {query} Analysis: What It Means for the Team",
-                            "summary": f"An in-depth analysis of how {query} affects the Lakers' season outlook and future prospects.",
-                            "relevance_score": 0.92,
-                            "published_date": "2024-01-14T15:30:00Z",
-                            "source": "The Athletic"
-                        }
-                    ],
-                    "search_metadata": {
-                        "query_processed": query,
-                        "search_time_ms": 245,
-                        "filters_applied": ["league", "date_range"],
-                        "suggestions": ["lakers trade", "lakers injury", "lakers stats"]
+            articles = []
+            
+            # Try NewsAPI first if key is available
+            if self.newsapi_key:
+                try:
+                    search_query = f"{query} {league}"
+                    newsapi_url = f"{self.newsapi_base}/everything"
+                    from_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+                    
+                    params = {
+                        "q": search_query,
+                        "language": "en",
+                        "sortBy": "relevancy",
+                        "pageSize": 10,
+                        "from": from_date,
+                        "apiKey": self.newsapi_key
                     }
+                    
+                    resp = requests.get(newsapi_url, params=params, timeout=10)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    
+                    if data.get("status") == "ok" and data.get("articles"):
+                        for article in data["articles"]:
+                            articles.append({
+                                "title": article.get("title", ""),
+                                "summary": article.get("description", "")[:200],
+                                "relevance_score": 0.9,  # NewsAPI sorts by relevance
+                                "published_date": article.get("publishedAt", ""),
+                                "source": article.get("source", {}).get("name", "Unknown"),
+                                "url": article.get("url", "")
+                            })
+                except Exception as e:
+                    logger.warning(f"NewsAPI search failed: {e}, falling back to RSS")
+            
+            # Fallback: search RSS feed articles
+            if not articles:
+                rss_articles = self._get_news_from_rss(league, limit=20)
+                query_lower = query.lower()
+                for article in rss_articles:
+                    if query_lower in article.get("title", "").lower() or query_lower in article.get("summary", "").lower():
+                        articles.append({
+                            "title": article.get("title", ""),
+                            "summary": article.get("summary", ""),
+                            "relevance_score": 0.7,
+                            "published_date": article.get("published_date", ""),
+                            "source": article.get("source", ""),
+                            "url": article.get("url", "")
+                        })
+            
+            return {
+                "api_source": "NewsAPI / RSS Feeds",
+                "search_results": {
+                    "total_results": len(articles),
+                    "articles": articles[:10],
+                    "query": query,
+                    "league": league
                 }
             }
             
-            return {
-                "api_source": "Sports News Search API",
-                "api_endpoint": f"{self.news_api_base}/v1/search",
-                "search_results": search_response["search_results"]
-            }
-            
         except Exception as e:
-            logger.error(f"❌ Failed to search sports news via external API: {e}")
+            logger.error(f"❌ Failed to search sports news: {e}")
             return {
-                "api_source": "Sports News Search API",
-                "api_endpoint": f"{self.news_api_base}/v1/search",
+                "api_source": "NewsAPI / RSS Feeds",
                 "search_results": {
                     "query": query,
                     "error": f"API call failed: {e}",

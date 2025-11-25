@@ -1,48 +1,102 @@
-# Exercise Solution
+# Exercise Solution: Integrating External APIs with Semantic Kernel
 
 [VIDEO_PLACEHOLDER: Integrating External APIs with Semantic Kernel]
 
-### **Solution Walkthrough**
+## **Solution Walkthrough**
 
-We expand the kernel by registering multiple external API plugins so the agent can pull real‑time data across inventory, shipping, pricing, recommendations, and reviews.
+This solution demonstrates how to integrate external API tools into your Semantic Kernel agent by registering the RecommendationTools plugin and implementing structured return dictionaries for both success and failure cases.
+
+## **Task 1: Register the RecommendationTools Plugin (main.py)**
 
 ```python
-# Register external API tools
-kernel.add_plugin(InventoryTools(), "inventory")
-kernel.add_plugin(ShippingTools(), "shipping")
-kernel.add_plugin(PricingTools(), "pricing")
 kernel.add_plugin(RecommendationTools(), "recommendations")
-kernel.add_plugin(ReviewTools(), "reviews")
+logger.info("✅ RecommendationTools plugin added successfully")
 ```
 
-The solution adds explicit test routines to exercise each API and log key fields. These are narrow, inspectable checks rather than end‑to‑end flows.
+This registers the RecommendationTools class as a plugin named "recommendations", making all its methods available to the Semantic Kernel agent.
 
+## **Task 2: Implement Return Dictionaries (tools/recommendations.py)**
+
+### **get_product_recommendations()**
+
+**Success case:**
 ```python
-# Example: Shipping rate calculation (excerpt)
-shipping_result = shipping_tools.calculate_shipping("10001", "90210", 2.5, "12x8x4", "ground")
-cheapest = shipping_result.get('shipping_calculation', {}).get('cheapest_option', {})
-if cheapest:
-    logger.info(f"Cheapest: {cheapest.get('service_name')} - ${cheapest.get('cost')}")
+return {
+    "api_source": "Product Recommendation Engine API",
+    "api_endpoint": f"{self.recommendation_api_base}/v1/recommendations",
+    "recommendation_results": recommendation_api_response["recommendations"]
+}
 ```
 
-We also include realistic integration scenarios (product research, order processing, customer support) that combine multiple APIs and summarize outcomes.
-
+**Failure case:**
 ```python
-# Scenario: Product research (excerpt)
-inventory = inventory_tools.check_inventory(product_id)
-pricing = pricing_tools.get_market_pricing("Wireless Headphones")
-reviews = review_tools.get_product_reviews(product_id, limit=3)
-recommendations = recommendation_tools.get_product_recommendations(product_id=product_id, limit=2)
+return {
+    "api_source": "Product Recommendation Engine API",
+    "api_endpoint": f"{self.recommendation_api_base}/v1/recommendations",
+    "recommendation_results": {
+        "customer_id": customer_id,
+        "product_id": product_id,
+        "error": f"API call failed: {e}",
+        "products": []
+    }
+}
 ```
 
+### **get_trending_products()**
+
+**Success case:**
+```python
+return {
+    "api_source": "Analytics and Trending API",
+    "api_endpoint": f"{self.analytics_api_base}/v1/trending",
+    "trending_analysis": trending_api_response["trending_analysis"]
+}
 ```
-✅ External API Integration Testing completed successfully!
+
+**Failure case:**
+```python
+return {
+    "api_source": "Analytics and Trending API",
+    "api_endpoint": f"{self.analytics_api_base}/v1/trending",
+    "trending_analysis": {
+        "category": category,
+        "time_period": time_period,
+        "error": f"API call failed: {e}",
+        "trending_products": []
+    }
+}
 ```
 
-[IMAGE_PLACEHOLDER: Screengrab of logs showing inventory/pricing/reviews summaries]
+### **get_cross_sell_recommendations()**
 
-### **Key Takeaway**
+**Success case:**
+```python
+return {
+    "api_source": "Cross-Sell Recommendation API",
+    "api_endpoint": f"{self.recommendation_api_base}/v1/cross-sell",
+    "cross_sell_analysis": cross_sell_api_response["cross_sell_analysis"]
+}
+```
 
-> The solution registers multiple external API plugins and adds focused tests plus scenarios to validate real‑time data flows end‑to‑end.
+**Failure case:**
+```python
+return {
+    "api_source": "Cross-Sell Recommendation API",
+    "api_endpoint": f"{self.recommendation_api_base}/v1/cross-sell",
+    "cross_sell_analysis": {
+        "product_id": product_id,
+        "customer_segment": customer_segment,
+        "error": f"API call failed: {e}",
+        "recommendations": []
+    }
+}
+```
+
+## **Key Takeaways**
+
+- **Consistent Structure**: All return dictionaries follow the same pattern with `api_source`, `api_endpoint`, and a results key
+- **Error Handling**: Failure cases maintain the same structure as success cases but include error messages and empty data
+- **Plugin Registration**: Using `kernel.add_plugin()` makes external API tools available to the agent
+- **Metadata Tracking**: Including API source and endpoint information helps with debugging and monitoring
 
 [INSTRUCTIONS FOR ACCESSING THE SOLUTION ENVIRONMENT]

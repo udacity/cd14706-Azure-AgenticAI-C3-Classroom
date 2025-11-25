@@ -8,30 +8,30 @@ logger = logging.getLogger(__name__)
 
 class RecommendationTools:
     """Tools for product recommendations using external recommendation APIs"""
-    
+
     def __init__(self):
         # Using external recommendation engine APIs
         self.recommendation_api_base = "https://api.recommendationengine.com"
         self.analytics_api_base = "https://api.analytics.com"
-    
+
     @kernel_function(name="get_product_recommendations", description="Get product recommendations using external recommendation API")
-    def get_product_recommendations(self, customer_id: str = None, product_id: str = None, 
+    def get_product_recommendations(self, customer_id: str = None, product_id: str = None,
                                    category: str = None, limit: int = 5) -> Dict[str, Any]:
         """
         Get product recommendations using external recommendation API.
-        
+
         Args:
             customer_id: Customer ID for personalized recommendations
             product_id: Product ID to find similar products for
             category: Product category for recommendations
             limit: Maximum number of recommendations to return
-            
+
         Returns:
             Dictionary containing product recommendations
         """
         try:
             logger.info(f"Getting product recommendations via external API for customer: {customer_id}, product: {product_id}")
-            
+
             # Simulate API call to recommendation engine
             recommendation_api_response = {
                 "status": "success",
@@ -102,37 +102,36 @@ class RecommendationTools:
                     ]
                 }
             }
-            
+
             # Limit results if specified
             if limit and len(recommendation_api_response["recommendations"]["products"]) > limit:
                 recommendation_api_response["recommendations"]["products"] = recommendation_api_response["recommendations"]["products"][:limit]
-            
+
             return {
                 # TODO: Implement this
             }
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to get product recommendations via external API: {e}")
             return {
                 # TODO: Implement this
-                }
             }
-    
+
     @kernel_function(name="get_trending_products", description="Get trending products using external analytics API")
     def get_trending_products(self, category: str = None, time_period: str = "7d") -> Dict[str, Any]:
         """
         Get trending products using external analytics API.
-        
+
         Args:
             category: Product category to get trends for
             time_period: Time period for trend analysis (1d, 7d, 30d)
-            
+
         Returns:
             Dictionary containing trending products
         """
         try:
             logger.info(f"Getting trending products via external API for category: {category}, period: {time_period}")
-            
+
             # Simulate API call to analytics service
             trending_api_response = {
                 "status": "success",
@@ -187,33 +186,32 @@ class RecommendationTools:
                     }
                 }
             }
-            
+
             return {
                 # TODO: Implement this
             }
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to get trending products via external API: {e}")
             return {
                 # TODO: Implement this
-                }
             }
-    
+
     @kernel_function(name="get_cross_sell_recommendations", description="Get cross-sell recommendations using external API")
     def get_cross_sell_recommendations(self, product_id: str, customer_segment: str = "general") -> Dict[str, Any]:
         """
         Get cross-sell recommendations for a specific product using external API.
-        
+
         Args:
             product_id: Product ID to get cross-sell recommendations for
             customer_segment: Customer segment (general, premium, budget)
-            
+
         Returns:
             Dictionary containing cross-sell recommendations
         """
         try:
             logger.info(f"Getting cross-sell recommendations via external API for product: {product_id}, segment: {customer_segment}")
-            
+
             # Simulate API call to cross-sell recommendation service
             cross_sell_api_response = {
                 "status": "success",
@@ -261,11 +259,11 @@ class RecommendationTools:
                     }
                 }
             }
-            
+
             return {
                 # TODO: Implement this
             }
-            
+
         except Exception as e:
             logger.error(f"❌ Failed to get cross-sell recommendations via external API: {e}")
             return {

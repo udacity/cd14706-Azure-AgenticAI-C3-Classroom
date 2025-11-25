@@ -21,6 +21,9 @@ from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.functions import KernelArguments
 from tools.sports_scores import SportsScoresTools
 from tools.player_stats import PlayerStatsTools
@@ -40,29 +43,30 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Reduce verbosity from noisy libraries
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('semantic_kernel').setLevel(logging.WARNING)
+logging.getLogger('tools.sports_scores').setLevel(logging.WARNING)
+logging.getLogger('tools.player_stats').setLevel(logging.WARNING)
+logging.getLogger('tools.sports_news').setLevel(logging.WARNING)
+logging.getLogger('tools.team_standings').setLevel(logging.WARNING)
+logging.getLogger('tools.sports_analytics').setLevel(logging.WARNING)
+
 
 def create_kernel():
     """Create and configure Semantic Kernel with Azure services and tools"""
     try:
-        logger.info("🚀 Starting Semantic Kernel setup...")
-        
         # Get Azure configuration
-        logger.info("📋 Retrieving Azure OpenAI configuration from environment variables...")
         AZURE_OPENAI_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
         AZURE_OPENAI_API_VERSION = os.environ["AZURE_OPENAI_API_VERSION"]
         DEPLOYMENT_CHAT = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]
         DEPLOYMENT_EMBED = os.environ["AZURE_OPENAI_EMBED_DEPLOYMENT"]
         AZURE_OPENAI_KEY = os.environ["AZURE_OPENAI_KEY"]
-        
-        logger.info(f"✅ Configuration loaded - Endpoint: {AZURE_OPENAI_ENDPOINT}")
-        logger.info(f"📊 Chat deployment: {DEPLOYMENT_CHAT}, Embedding deployment: {DEPLOYMENT_EMBED}")
-        
+
         # Create kernel
-        logger.info("🔧 Creating Semantic Kernel instance...")
         kernel = Kernel()
-        
+
         # Add Azure services
-        logger.info("🤖 Adding Azure Chat Completion service...")
         kernel.add_service(
             AzureChatCompletion(
                 deployment_name=DEPLOYMENT_CHAT,
@@ -71,9 +75,7 @@ def create_kernel():
                 api_version=AZURE_OPENAI_API_VERSION
             )
         )
-        logger.info("✅ Azure Chat Completion service added successfully")
-        
-        logger.info("🧠 Adding Azure Text Embedding service...")
+
         kernel.add_service(
             AzureTextEmbedding(
                 deployment_name=DEPLOYMENT_EMBED,
@@ -82,28 +84,17 @@ def create_kernel():
                 api_version=AZURE_OPENAI_API_VERSION
             )
         )
-        logger.info("✅ Azure Text Embedding service added successfully")
-        
+
         # Add sports tools as SK plugins
-        logger.info("🛠️ Adding sports analysis tools as Semantic Kernel plugins...")
         kernel.add_plugin(SportsScoresTools(), "sports_scores")
-        logger.info("✅ SportsScoresTools plugin added successfully")
-        
         kernel.add_plugin(PlayerStatsTools(), "player_stats")
-        logger.info("✅ PlayerStatsTools plugin added successfully")
-        
+
         # Add external API tools
-        logger.info("🌐 Adding external API tools as Semantic Kernel plugins...")
         kernel.add_plugin(SportsNewsTools(), "sports_news")
-        logger.info("✅ SportsNewsTools plugin added successfully")
-        
         kernel.add_plugin(TeamStandingsTools(), "team_standings")
-        logger.info("✅ TeamStandingsTools plugin added successfully")
-        
         kernel.add_plugin(SportsAnalyticsTools(), "sports_analytics")
-        logger.info("✅ SportsAnalyticsTools plugin added successfully")
-        
-        logger.info("🎉 Semantic Kernel setup completed successfully!")
+
+        logger.info("✅ Kernel initialized with 5 plugins")
         return kernel
         
     except KeyError as e:
@@ -171,19 +162,15 @@ Always respond with valid JSON that matches these schemas exactly.
 def parse_and_validate_response(response_text: str, query_type: str) -> SportsAnalysisResponse:
     """Parse LLM response and validate against Pydantic models"""
     try:
-        logger.info("🔍 Parsing and validating LLM response...")
-        
         # Extract JSON from response (handle cases where LLM includes extra text)
         json_start = response_text.find('{')
         json_end = response_text.rfind('}') + 1
-        
+
         if json_start == -1 or json_end == 0:
             raise ValueError("No valid JSON found in response")
-        
+
         json_str = response_text[json_start:json_end]
         response_data = json.loads(json_str)
-        
-        logger.info("✅ JSON parsed successfully")
         
         # Ensure required fields have defaults if missing
         if "tools_used" not in response_data:
@@ -217,7 +204,6 @@ def parse_and_validate_response(response_text: str, query_type: str) -> SportsAn
                     game_data["highlights"] = []
                 
                 game_result = GameResult(**game_data)
-                logger.info(f"✅ Game data validated: {game_result.home_team} vs {game_result.away_team}")
                 
             elif query_type == "player_stats":
                 # Add fallback values for player data
@@ -238,9 +224,7 @@ def parse_and_validate_response(response_text: str, query_type: str) -> SportsAn
                     player_data["assists_per_game"] = 0.0
                 
                 player_performance = PlayerPerformance(**player_data)
-                logger.info(f"✅ Player data validated: {player_performance.player_name} - {player_performance.position}")
-        
-        logger.info("🎉 All Pydantic validation passed!")
+
         return sports_response
         
     except json.JSONDecodeError as e:
@@ -254,8 +238,6 @@ def parse_and_validate_response(response_text: str, query_type: str) -> SportsAn
 async def process_sports_query_with_memory_and_apis(kernel: Kernel, query: str, memory: ShortTermMemory) -> SportsAnalysisResponse:
     """Process a sports query using Semantic Kernel with memory context and external APIs"""
     try:
-        logger.info(f"🤖 Processing sports query with memory and external APIs: {query}")
-        
         # Add user query to memory
         memory.add_conversation("user", query)
         
@@ -272,18 +254,28 @@ Previous conversation context:
 Current sports query: {query}
 """
         
-        # Create a function from the prompt
-        sports_analysis_function = kernel.add_function(
-            function_name="sports_analysis",
-            plugin_name="sports_analysis",
-            prompt=prompt
+        # Create chat history with memory context
+        chat_history = ChatHistory()
+        chat_history.add_system_message("You are an expert sports analyst with access to tools for sports scores, player statistics, news, standings, and analytics.")
+        if context:
+            chat_history.add_system_message(f"Previous conversation context:\n{context}")
+        chat_history.add_user_message(f"{create_sports_analysis_prompt()}\n\nCurrent sports query: {query}")
+
+        # Get chat completion service and enable automatic tool calling
+        chat_service = kernel.get_service(type=ChatCompletionClientBase)
+        execution_settings = kernel.get_prompt_execution_settings_from_service_id(
+            service_id=chat_service.service_id
         )
+        execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
+
+        # Execute with automatic tool invocation
+        result = await chat_service.get_chat_message_contents(
+            chat_history=chat_history,
+            settings=execution_settings,
+            kernel=kernel
+        )
+        response_text = str(result[0])
         
-        # Execute the function
-        result = await kernel.invoke(sports_analysis_function)
-        response_text = str(result)
-        
-        logger.info("📝 Raw LLM response received")
         logger.debug(f"Response: {response_text}")
         
         # Determine query type for validation
@@ -302,50 +294,11 @@ Current sports query: {query}
         
         # Add assistant response to memory
         memory.add_conversation("assistant", validated_response.human_readable_response)
-        
-        # Add tool calls to memory if any were used
-        for tool in validated_response.tools_used:
-            if tool == "sports_scores":
-                # Simulate sports scores tool call
-                league = "NBA" if "nba" in query.lower() else "NFL" if "nfl" in query.lower() else "NBA"
-                memory.add_tool_call("sports_scores", {"league": league, "team": None}, {
-                    "league": league,
-                    "games": [{"home_team": "Lakers", "away_team": "Warriors", "home_score": 120, "away_score": 115}],
-                    "total_games": 1
-                })
-            elif tool == "player_stats":
-                # Simulate player stats tool call
-                player_name = "LeBron James" if "lebron" in query.lower() else "Stephen Curry"
-                memory.add_tool_call("player_stats", {"player_name": player_name, "league": "NBA"}, {
-                    "player_name": player_name,
-                    "team": "Lakers" if "lebron" in query.lower() else "Warriors",
-                    "points_per_game": 25.2 if "lebron" in query.lower() else 28.1,
-                    "league": "NBA"
-                })
-            elif tool == "sports_news":
-                # Simulate sports news tool call
-                memory.add_tool_call("sports_news", {"league": "NBA", "team": None}, {
-                    "league": "NBA",
-                    "articles": [{"title": "Lakers Win Big", "summary": "Lakers dominate Warriors in latest game"}],
-                    "total_articles": 1
-                })
-            elif tool == "team_standings":
-                # Simulate team standings tool call
-                memory.add_tool_call("team_standings", {"league": "NBA", "team": "Lakers"}, {
-                    "league": "NBA",
-                    "team": "Lakers",
-                    "wins": 25,
-                    "losses": 15,
-                    "conference_rank": 3
-                })
-            elif tool == "sports_analytics":
-                # Simulate sports analytics tool call
-                memory.add_tool_call("sports_analytics", {"analysis_type": "performance"}, {
-                    "analysis_type": "performance",
-                    "insights": ["Team showing strong offensive performance"],
-                    "metrics": {"offensive_rating": 115.2}
-                })
-        
+
+        # Tools are now automatically invoked by FunctionChoiceBehavior.Auto()
+        if validated_response.tools_used:
+            logger.info(f"✅ Tools used: {validated_response.tools_used}")
+
         return validated_response
         
     except Exception as e:
@@ -364,57 +317,26 @@ Current sports query: {query}
 
 
 async def test_external_sports_apis():
-    """Test all external sports API integrations"""
-    logger.info("🧪 Testing External Sports API Integrations")
-    logger.info("=" * 60)
-    
-    # Initialize all external sports API tools
+    """Test external API integrations"""
+    # Initialize tools
     news_tools = SportsNewsTools()
-    standings_tools = TeamStandingsTools()
-    analytics_tools = SportsAnalyticsTools()
-    
-    # Test Sports News API
-    logger.info("\n📰 Testing Sports News API")
-    logger.info("-" * 40)
+    player_tools = PlayerStatsTools()
+
+    # Test Sports News API (Real API)
     try:
         news_result = news_tools.get_latest_news("NBA", "Lakers")
-        logger.info(f"✅ Sports News API Response:")
-        logger.info(f"   API Source: {news_result.get('api_source', 'Unknown')}")
-        logger.info(f"   Articles Found: {len(news_result.get('news_data', {}).get('articles', []))}")
-        logger.info(f"   Latest Headline: {news_result.get('news_data', {}).get('articles', [{}])[0].get('title', 'N/A')}")
-        
+        articles = len(news_result.get('news_data', {}).get('articles', []))
+        logger.info(f"  📰 Sports News API: {articles} articles (Real API)")
     except Exception as e:
-        logger.error(f"❌ Sports News API Test Failed: {e}")
-    
-    # Test Team Standings API
-    logger.info("\n🏆 Testing Team Standings API")
-    logger.info("-" * 40)
+        logger.error(f"  ❌ Sports News API failed: {e}")
+
+    # Test Player Stats API (Real API with fallback)
     try:
-        standings_result = standings_tools.get_team_standings("NBA", "Lakers")
-        logger.info(f"✅ Team Standings API Response:")
-        logger.info(f"   API Source: {standings_result.get('api_source', 'Unknown')}")
-        standings_data = standings_result.get('standings_data', {})
-        logger.info(f"   Team: {standings_data.get('team', 'Unknown')}")
-        logger.info(f"   Record: {standings_data.get('wins', 0)}-{standings_data.get('losses', 0)}")
-        logger.info(f"   Conference Rank: {standings_data.get('conference_rank', 'N/A')}")
-        
+        player_result = player_tools.get_player_stats("LeBron James", "NBA")
+        source = "Real API" if "Ball Don't Lie" in player_result.get("api_source", "") else "Mock Fallback"
+        logger.info(f"  🏀 Player Stats API: {player_result.get('player_name', 'Unknown')} ({source})")
     except Exception as e:
-        logger.error(f"❌ Team Standings API Test Failed: {e}")
-    
-    # Test Sports Analytics API
-    logger.info("\n📊 Testing Sports Analytics API")
-    logger.info("-" * 40)
-    try:
-        analytics_result = analytics_tools.get_team_analytics("Lakers", "NBA")
-        logger.info(f"✅ Sports Analytics API Response:")
-        logger.info(f"   API Source: {analytics_result.get('api_source', 'Unknown')}")
-        analytics_data = analytics_result.get('analytics_data', {})
-        logger.info(f"   Analysis Type: {analytics_data.get('analysis_type', 'Unknown')}")
-        logger.info(f"   Insights: {len(analytics_data.get('insights', []))}")
-        logger.info(f"   Metrics Count: {len(analytics_data.get('metrics', {}))}")
-        
-    except Exception as e:
-        logger.error(f"❌ Sports Analytics API Test Failed: {e}")
+        logger.error(f"  ❌ Player Stats API failed: {e}")
 
 
 async def run_sports_demo_with_apis(kernel: Kernel):
@@ -455,8 +377,7 @@ async def run_sports_demo_with_apis(kernel: Kernel):
         
         # Create fresh memory for each scenario
         memory = ShortTermMemory(max_items=10, max_tokens=2000)
-        logger.info(f"🧠 Created new memory: {memory}")
-        
+
         for step, user_input in enumerate(scenario['inputs'], 1):
             logger.info(f"\n--- Step {step}: {user_input} ---")
             
@@ -466,28 +387,13 @@ async def run_sports_demo_with_apis(kernel: Kernel):
             # Display response
             logger.info(f"📝 Agent Response:")
             logger.info(f"   {response.human_readable_response}")
-            
-            # Show memory state
-            memory_summary = memory.get_memory_summary()
-            logger.info(f"🧠 Memory State:")
-            logger.info(f"   Items: {memory_summary['total_items']}")
-            logger.info(f"   Tokens: {memory_summary['total_tokens']}")
-            logger.info(f"   Usage: {memory_summary['memory_usage_percent']:.1f}%")
-            
-            # Show sports context
-            sports_context = memory.get_sports_context()
-            logger.info(f"🏀 Sports Context:")
-            logger.info(f"   Teams: {sports_context['teams']}")
-            logger.info(f"   Leagues: {sports_context['leagues']}")
-            logger.info(f"   Players: {sports_context['players']}")
-            logger.info(f"   Recent queries: {len(sports_context['recent_queries'])}")
-            logger.info(f"   Tool calls: {len(sports_context['tool_calls'])}")
         
         # Final memory analysis
+        summary = memory.get_memory_summary()
         logger.info(f"\n📊 Final Memory Analysis for Scenario {i}:")
-        logger.info(f"   Total conversation items: {memory.get_memory_summary()['total_items']}")
-        logger.info(f"   Total tokens used: {memory.get_memory_summary()['total_tokens']}")
-        logger.info(f"   Memory efficiency: {memory.get_memory_summary()['memory_usage_percent']:.1f}%")
+        logger.info(f"   Total conversation items: {summary['total_items']}")
+        logger.info(f"   Total tokens used: {summary['total_tokens']}")
+        logger.info(f"   Memory efficiency: {summary['memory_usage_percent']:.1f}%")
 
 
 def main():
@@ -496,53 +402,22 @@ def main():
     from datetime import datetime
     
     try:
+        logger.info("🎯 Sports Analyst Agent Demo")
         logger.info("=" * 80)
-        logger.info("🎯 Starting Sports Analyst Agent with External APIs Demo")
-        logger.info("=" * 80)
-        logger.info("📁 Loading environment variables from .env file...")
-        
+
         # Create the kernel
         kernel = create_kernel()
-        
-        # List available plugins and functions
-        logger.info("📋 Available plugins and functions:")
-        for plugin_name, plugin in kernel.plugins.items():
-            logger.info(f"  🔌 Plugin: {plugin_name}")
-            for function_name, function in plugin.functions.items():
-                logger.info(f"    ⚙️  Function: {function_name}")
-        
-        logger.info("\n🧠 Memory Management Features:")
-        logger.info("=" * 50)
-        logger.info("  - Short-term memory for sports conversations")
-        logger.info("  - Context window management")
-        logger.info("  - Sports entity tracking (teams, players, leagues)")
-        logger.info("  - Tool call history and success tracking")
-        logger.info("  - Memory search and retrieval")
-        logger.info("  - Automatic context extraction")
-        
-        logger.info("\n🌐 External API Features:")
-        logger.info("=" * 50)
-        logger.info("  - Sports News API for latest updates")
-        logger.info("  - Team Standings API for current rankings")
-        logger.info("  - Sports Analytics API for performance insights")
-        logger.info("  - Real-time data integration")
-        logger.info("  - Error handling and fallback mechanisms")
-        
+
         # Test external APIs
-        logger.info("\n🧪 Testing External Sports APIs")
-        logger.info("=" * 50)
+        logger.info("\n🧪 Testing External APIs")
         asyncio.run(test_external_sports_apis())
-        
+
         # Run the sports demo with external APIs
-        logger.info("\n🎭 Running Sports Demo with External APIs")
-        logger.info("=" * 50)
+        logger.info("\n🎭 Running Demo Scenarios")
+        logger.info("=" * 80)
         asyncio.run(run_sports_demo_with_apis(kernel))
-        
-        logger.info("\n" + "=" * 80)
-        logger.info("✅ Sports Analyst Agent with External APIs Demo completed successfully!")
-        logger.info("🎉 All external APIs integrated and working!")
-        logger.info("🧠 Agent memory capabilities showcased!")
-        logger.info("🏆 Real-time sports data integration demonstrated!")
+
+        logger.info("\n✅ Demo completed successfully!")
         logger.info("=" * 80)
         
     except Exception as e:

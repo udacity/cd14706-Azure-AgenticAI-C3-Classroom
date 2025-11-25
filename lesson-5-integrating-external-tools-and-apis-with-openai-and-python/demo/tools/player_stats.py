@@ -1,238 +1,150 @@
 # tools/player_stats.py
 from semantic_kernel.functions import kernel_function
+import requests
 import logging
-import random
+import os
 
 logger = logging.getLogger(__name__)
 
+BALLDONTLIE_API = "https://api.balldontlie.io/nba/v1"
+
 class PlayerStatsTools:
-    @kernel_function(name="get_player_stats", description="Get detailed player statistics for various sports")
-    def get_player_stats(self, player_name: str, league: str = "NBA", season: str = "2023-24"):
-        """
-        Get detailed player statistics for various sports.
-        
-        Args:
-            player_name: Name of the player
-            league: The sports league (NBA, NFL, MLB, NHL, etc.)
-            season: Season year (e.g., "2023-24", "2024")
-            
-        Returns:
-            Dictionary containing player statistics
-        """
-        try:
-            logger.info(f"Getting player stats for: {player_name}, league: {league}, season: {season}")
-            
-            # Mock player data - in a real application, this would query a sports API
-            mock_players = {
-                "NBA": {
-                    "LeBron James": {
-                        "player_id": "NBA-001",
-                        "name": "LeBron James",
-                        "team": "Los Angeles Lakers",
-                        "position": "Forward",
-                        "age": 39,
-                        "height": "6'9\"",
-                        "weight": "250 lbs",
-                        "season": "2023-24",
-                        "stats": {
-                            "games_played": 45,
-                            "points_per_game": 25.2,
-                            "rebounds_per_game": 7.8,
-                            "assists_per_game": 8.1,
-                            "field_goal_percentage": 52.4,
-                            "three_point_percentage": 35.2,
-                            "free_throw_percentage": 73.1,
-                            "minutes_per_game": 35.2,
-                            "plus_minus": 2.3
-                        },
-                        "recent_form": "Good - 3-game winning streak",
-                        "injury_status": "Healthy"
-                    },
-                    "Stephen Curry": {
-                        "player_id": "NBA-002",
-                        "name": "Stephen Curry",
-                        "team": "Golden State Warriors",
-                        "position": "Guard",
-                        "age": 35,
-                        "height": "6'2\"",
-                        "weight": "185 lbs",
-                        "season": "2023-24",
-                        "stats": {
-                            "games_played": 42,
-                            "points_per_game": 28.1,
-                            "rebounds_per_game": 4.4,
-                            "assists_per_game": 5.2,
-                            "field_goal_percentage": 45.3,
-                            "three_point_percentage": 42.1,
-                            "free_throw_percentage": 91.7,
-                            "minutes_per_game": 32.8,
-                            "plus_minus": 4.1
-                        },
-                        "recent_form": "Excellent - Leading scorer",
-                        "injury_status": "Healthy"
-                    },
-                    "Luka Doncic": {
-                        "player_id": "NBA-003",
-                        "name": "Luka Doncic",
-                        "team": "Dallas Mavericks",
-                        "position": "Guard",
-                        "age": 24,
-                        "height": "6'7\"",
-                        "weight": "230 lbs",
-                        "season": "2023-24",
-                        "stats": {
-                            "games_played": 48,
-                            "points_per_game": 32.4,
-                            "rebounds_per_game": 8.2,
-                            "assists_per_game": 9.1,
-                            "field_goal_percentage": 48.7,
-                            "three_point_percentage": 37.9,
-                            "free_throw_percentage": 78.6,
-                            "minutes_per_game": 37.5,
-                            "plus_minus": 3.8
-                        },
-                        "recent_form": "Outstanding - MVP candidate",
-                        "injury_status": "Healthy"
-                    }
+    def _get_mock_stats(self, player_name: str, league: str = "NBA"):
+        """Return mock player stats as fallback"""
+        mock_players = {
+            "lebron james": {
+                "player_name": "LeBron James",
+                "team": "Los Angeles Lakers",
+                "position": "Forward",
+                "height": "6-9",
+                "weight": "250 lbs",
+                "age": 39,
+                "stats": {
+                    "points_per_game": 25.7,
+                    "rebounds_per_game": 7.3,
+                    "assists_per_game": 8.3,
+                    "field_goal_percentage": 0.540,
+                    "three_point_percentage": 0.410,
+                    "free_throw_percentage": 0.750
                 },
-                "NFL": {
-                    "Patrick Mahomes": {
-                        "player_id": "NFL-001",
-                        "name": "Patrick Mahomes",
-                        "team": "Kansas City Chiefs",
-                        "position": "Quarterback",
-                        "age": 28,
-                        "height": "6'3\"",
-                        "weight": "230 lbs",
-                        "season": "2024",
-                        "stats": {
-                            "games_played": 17,
-                            "passing_yards": 4183,
-                            "passing_touchdowns": 27,
-                            "interceptions": 14,
-                            "completion_percentage": 66.8,
-                            "passer_rating": 92.6,
-                            "rushing_yards": 389,
-                            "rushing_touchdowns": 4
-                        },
-                        "recent_form": "Good - Playoff bound",
-                        "injury_status": "Healthy"
-                    },
-                    "Josh Allen": {
-                        "player_id": "NFL-002",
-                        "name": "Josh Allen",
-                        "team": "Buffalo Bills",
-                        "position": "Quarterback",
-                        "age": 27,
-                        "height": "6'5\"",
-                        "weight": "237 lbs",
-                        "season": "2024",
-                        "stats": {
-                            "games_played": 17,
-                            "passing_yards": 4306,
-                            "passing_touchdowns": 29,
-                            "interceptions": 18,
-                            "completion_percentage": 66.5,
-                            "passer_rating": 92.2,
-                            "rushing_yards": 524,
-                            "rushing_touchdowns": 15
-                        },
-                        "recent_form": "Excellent - Dual threat",
-                        "injury_status": "Healthy"
-                    }
+                "message": "Mock data - Real API unavailable"
+            },
+            "stephen curry": {
+                "player_name": "Stephen Curry",
+                "team": "Golden State Warriors",
+                "position": "Guard",
+                "height": "6-2",
+                "weight": "185 lbs",
+                "age": 35,
+                "stats": {
+                    "points_per_game": 26.4,
+                    "rebounds_per_game": 4.5,
+                    "assists_per_game": 5.0,
+                    "field_goal_percentage": 0.453,
+                    "three_point_percentage": 0.408,
+                    "free_throw_percentage": 0.910
                 },
-                "MLB": {
-                    "Aaron Judge": {
-                        "player_id": "MLB-001",
-                        "name": "Aaron Judge",
-                        "team": "New York Yankees",
-                        "position": "Right Field",
-                        "age": 31,
-                        "height": "6'7\"",
-                        "weight": "282 lbs",
-                        "season": "2024",
-                        "stats": {
-                            "games_played": 106,
-                            "batting_average": 0.275,
-                            "home_runs": 37,
-                            "runs_batted_in": 75,
-                            "on_base_percentage": 0.406,
-                            "slugging_percentage": 0.613,
-                            "ops": 1.019,
-                            "stolen_bases": 5
-                        },
-                        "recent_form": "Good - Power hitting",
-                        "injury_status": "Healthy"
-                    }
+                "message": "Mock data - Real API unavailable"
+            },
+            "giannis antetokounmpo": {
+                "player_name": "Giannis Antetokounmpo",
+                "team": "Milwaukee Bucks",
+                "position": "Forward",
+                "height": "6-11",
+                "weight": "242 lbs",
+                "age": 29,
+                "stats": {
+                    "points_per_game": 31.1,
+                    "rebounds_per_game": 11.8,
+                    "assists_per_game": 5.7,
+                    "field_goal_percentage": 0.553,
+                    "three_point_percentage": 0.279,
+                    "free_throw_percentage": 0.651
                 },
-                "NHL": {
-                    "Connor McDavid": {
-                        "player_id": "NHL-001",
-                        "name": "Connor McDavid",
-                        "team": "Edmonton Oilers",
-                        "position": "Center",
-                        "age": 27,
-                        "height": "6'1\"",
-                        "weight": "194 lbs",
-                        "season": "2023-24",
-                        "stats": {
-                            "games_played": 45,
-                            "goals": 18,
-                            "assists": 35,
-                            "points": 53,
-                            "plus_minus": 8,
-                            "penalty_minutes": 18,
-                            "power_play_goals": 4,
-                            "short_handed_goals": 1
-                        },
-                        "recent_form": "Excellent - Leading scorer",
-                        "injury_status": "Healthy"
-                    }
-                }
+                "message": "Mock data - Real API unavailable"
             }
-            
-            # Get player data for the specified league
-            if league.upper() in mock_players:
-                league_players = mock_players[league.upper()]
-                
-                # Search for player by name (case-insensitive)
-                found_player = None
-                for player_key, player_data in league_players.items():
-                    if player_name.lower() in player_key.lower():
-                        found_player = player_data
-                        break
-                
-                if found_player:
-                    return found_player
-                else:
-                    return {
-                        "player_id": "UNKNOWN",
-                        "name": player_name,
-                        "team": "Unknown",
-                        "position": "Unknown",
-                        "season": season,
-                        "stats": {},
-                        "message": f"Player '{player_name}' not found in {league.upper()}"
-                    }
-            else:
-                return {
-                    "player_id": "UNKNOWN",
-                    "name": player_name,
-                    "team": "Unknown",
-                    "position": "Unknown",
-                    "season": season,
-                    "stats": {},
-                    "message": f"No data available for league: {league}"
-                }
-                
-        except Exception as e:
-            logger.error(f"❌ Failed to get player stats: {e}")
+        }
+
+        player_key = player_name.lower()
+        if player_key in mock_players:
+            return mock_players[player_key]
+        else:
+            # Generic fallback
             return {
-                "player_id": "UNKNOWN",
-                "name": player_name,
-                "team": "Unknown",
-                "position": "Unknown",
-                "season": season,
-                "stats": {},
-                "message": f"Error retrieving player stats: {e}"
+                "player_name": player_name,
+                "team": "Unknown Team",
+                "position": "N/A",
+                "message": f"Mock data for {player_name} - Real API unavailable"
             }
+
+    @kernel_function(name="get_player_stats", description="Get NBA player stats (tries real API, falls back to mock data)")
+    def get_player_stats(self, player_name: str, league: str = "NBA", season: str = "2023-24"):
+        """Fetch player stats from Ball Don't Lie API with mock fallback"""
+        if league.upper() != "NBA":
+            return self._get_mock_stats(player_name, league)
+
+        try:
+            logger.info(f"Fetching real stats for player: {player_name}")
+
+            BALLDONTLIE_API_KEY = os.getenv("BALLDONTLIE_API_KEY")
+            headers = {"Authorization": BALLDONTLIE_API_KEY} if BALLDONTLIE_API_KEY else {}
+
+            # 1️⃣ Get player ID
+            # Split player name into first and last name
+            name_parts = player_name.strip().split(maxsplit=1)
+            if len(name_parts) == 2:
+                first_name, last_name = name_parts
+            else:
+                # If only one name provided, try as last name
+                first_name, last_name = "", name_parts[0]
+
+            search_params = {}
+            if first_name:
+                search_params["first_name"] = first_name
+            if last_name:
+                search_params["last_name"] = last_name
+
+            search_resp = requests.get(
+                f"{BALLDONTLIE_API}/players",
+                params=search_params,
+                headers=headers
+            )
+            search_resp.raise_for_status()
+            data = search_resp.json()
+            if not data["data"]:
+                return {"error": f"No player found for '{player_name}'"}
+
+            player = data["data"][0]
+            player_id = player["id"]
+
+            # Return player info (free tier doesn't support /stats endpoint)
+            return {
+                "api_source": "Ball Don't Lie API (Free Tier - Player Info Only)",
+                "player_name": f"{player['first_name']} {player['last_name']}",
+                "player_id": str(player_id),
+                "team": player["team"]["full_name"],
+                "position": player["position"] or "N/A",
+                "height": player.get("height", "N/A"),
+                "weight": player.get("weight", "N/A"),
+                "jersey_number": player.get("jersey_number", "N/A"),
+                "college": player.get("college", "N/A"),
+                "country": player.get("country", "N/A"),
+                "draft_year": player.get("draft_year"),
+                "draft_round": player.get("draft_round"),
+                "draft_number": player.get("draft_number"),
+                "message": "Note: Game stats require Ball Don't Lie API paid plan. Free tier provides player information only."
+            }
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                logger.warning(f"Ball Don't Lie API unauthorized, using mock data")
+                return self._get_mock_stats(player_name, league)
+            elif e.response.status_code == 429:
+                logger.warning(f"Ball Don't Lie API rate limit exceeded, using mock data")
+                return self._get_mock_stats(player_name, league)
+            else:
+                logger.warning(f"Ball Don't Lie API error, using mock data: {e}")
+                return self._get_mock_stats(player_name, league)
+        except Exception as e:
+            logger.warning(f"Ball Don't Lie API unavailable, using mock data: {e}")
+            return self._get_mock_stats(player_name, league)

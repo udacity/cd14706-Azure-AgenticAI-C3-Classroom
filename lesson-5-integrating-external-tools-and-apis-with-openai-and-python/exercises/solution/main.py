@@ -20,6 +20,9 @@ from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.functions import KernelArguments
 from tools.order_status import OrderStatusTools
 from tools.product_info import ProductInfoTools
@@ -218,21 +221,30 @@ async def process_customer_query(kernel: Kernel, query: str) -> CustomerServiceR
     """Process a customer query using Semantic Kernel and return validated response"""
     try:
         logger.info(f"🤖 Processing customer query: {query}")
-        
+
         # Create the prompt with the customer query
         prompt = f"{create_customer_service_prompt()}\n\nCustomer query: {query}"
-        
-        # Create a function from the prompt
-        customer_service_function = kernel.add_function(
-            function_name="customer_service",
-            plugin_name="customer_service",
-            prompt=prompt
+
+        # Create chat history with system and user messages
+        chat_history = ChatHistory()
+        chat_history.add_system_message("You are a helpful customer service agent with access to tools for orders, products, inventory, shipping, pricing, recommendations, and reviews.")
+        chat_history.add_user_message(prompt)
+
+        # Get chat completion service and enable automatic tool calling
+        chat_service = kernel.get_service(type=ChatCompletionClientBase)
+        execution_settings = kernel.get_prompt_execution_settings_from_service_id(
+            service_id=chat_service.service_id
         )
-        
-        # Execute the function
-        result = await kernel.invoke(customer_service_function)
-        response_text = str(result)
-        
+        execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
+
+        # Execute with automatic tool invocation
+        result = await chat_service.get_chat_message_contents(
+            chat_history=chat_history,
+            settings=execution_settings,
+            kernel=kernel
+        )
+        response_text = str(result[0])
+
         logger.info("📝 Raw LLM response received")
         logger.debug(f"Response: {response_text}")
         

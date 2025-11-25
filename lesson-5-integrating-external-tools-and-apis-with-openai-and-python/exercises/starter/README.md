@@ -1,33 +1,106 @@
-# Exercise
+# Exercise: Integrating External APIs with Semantic Kernel
 
-Register multiple external API tool plugins and add focused test routines and scenarios to validate real‑time integrations.
+[VIDEO_PLACEHOLDER: Integrating External APIs with Semantic Kernel]
 
-### **Prerequisites**
+## **Overview**
 
-* Ability to register plugins in Semantic Kernel
+In this exercise, you'll integrate external API tools into your Semantic Kernel agent by implementing the RecommendationTools class and registering it as a plugin. This exercise focuses on understanding how to structure API responses for both success and failure cases.
 
-* Comfort reading and logging nested dict responses
+## **Learning Objectives**
 
-* Lessons 1–3 completed; Lesson 4 optional
+- Register external API tools as Semantic Kernel plugins
+- Structure API response dictionaries with proper metadata
+- Implement consistent error handling patterns
+- Understand the difference between success and failure response formats
 
-### **Instructions**
+## **Tasks**
 
-1. In `create_kernel()`, register the external tools by adding:
-   - `kernel.add_plugin(InventoryTools(), "inventory")`
-   - `kernel.add_plugin(ShippingTools(), "shipping")`
-   - `kernel.add_plugin(PricingTools(), "pricing")`
-   - `kernel.add_plugin(RecommendationTools(), "recommendations")`
-   - `kernel.add_plugin(ReviewTools(), "reviews")`
+### **Task 1: Register the RecommendationTools Plugin**
 
-2. Create `test_external_apis()` that calls each tool with sample inputs and logs key fields from the returned dicts (e.g., totals, cheapest shipping option, avg price, review counts, sentiment summary).
+In `main.py` (line 109), register the RecommendationTools plugin:
 
-3. Create `test_api_integration_scenarios()` and implement three scenarios:
-   - Product Research: inventory check → market pricing → reviews → recommendations (log concise summaries).
-   - Order Processing: multi‑item inventory check → shipping options → delivery estimate.
-   - Customer Support: reviews and sentiment for issues → competitor comparison.
+```python
+kernel.add_plugin(RecommendationTools(), "recommendations")
+```
 
-4. In `main()`, after listing available plugins, invoke both `test_external_apis()` and `test_api_integration_scenarios()` with `asyncio.run(...)`.
+**Hint:** Follow the pattern used for other plugins like `InventoryTools`, `ShippingTools`, and `PricingTools`.
 
-5. Keep structured validation from prior lessons if present; this exercise focuses on tool registration and integration tests rather than state management.
+### **Task 2: Implement Return Dictionaries in tools/recommendations.py**
 
-`[INSTRUCTIONS FOR ACCESSING THE EXERCISE ENVIRONMENT]`
+Complete the 6 TODO sections with return dictionaries. Each method has two cases to implement:
+
+#### **Success Case Pattern:**
+```python
+return {
+    "api_source": "Product Recommendation Engine API",
+    "api_endpoint": f"{self.recommendation_api_base}/v1/recommendations",
+    "recommendation_results": recommendation_api_response["recommendations"]
+}
+```
+
+Your return dictionary should include:
+- `"api_source"`: The name of the API being used
+- `"api_endpoint"`: The full endpoint URL
+- A results key containing the data from the API response
+
+#### **Failure Case Pattern:**
+```python
+return {
+    "api_source": "Product Recommendation Engine API",
+    "api_endpoint": f"{self.recommendation_api_base}/v1/recommendations",
+    "recommendation_results": {
+        "customer_id": customer_id,
+        "product_id": product_id,
+        "error": f"API call failed: {e}",
+        "products": []
+    }
+}
+```
+
+Your return dictionary should include:
+- `"api_source"`: The name of the API being used
+- `"api_endpoint"`: The full endpoint URL
+- A results dictionary with error information and empty data lists
+
+#### **Methods to Implement (6 TODOs):**
+
+1. `get_product_recommendations()` - Success case
+2. `get_product_recommendations()` - Failure case (in except block)
+3. `get_trending_products()` - Success case
+4. `get_trending_products()` - Failure case (in except block)
+5. `get_cross_sell_recommendations()` - Success case
+6. `get_cross_sell_recommendations()` - Failure case (in except block)
+
+Apply similar patterns for `get_trending_products()` and `get_cross_sell_recommendations()`.
+
+## **Hints**
+
+- Review the docstrings in each method for expected return structure
+- Look at how other tools (inventory, shipping, pricing) format their responses
+- The mock API response data is already provided - you just need to structure the return dictionary
+- Success responses should include the API response data
+- Failure responses should maintain the same structure but with error messages and empty data
+
+## **Testing Your Implementation**
+
+Run the exercise:
+```bash
+python main.py
+```
+
+You should see output showing:
+- All plugins registered successfully
+- Test results from each external API
+- Integration scenarios combining multiple APIs
+
+## **Expected Output**
+
+```
+✅ RecommendationTools plugin added successfully
+🎯 Testing Recommendation Engine API
+   API Source: Product Recommendation Engine API
+   Products Recommended: 5 recommendations
+✅ External API Integration Testing completed successfully!
+```
+
+[INSTRUCTIONS FOR ACCESSING THE STARTER ENVIRONMENT]

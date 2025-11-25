@@ -11,19 +11,17 @@ class SportsScoresTools:
     def get_sports_scores(self, league: str = "NBA", team: str = None, days_back: int = 1):
         """
         Get recent sports scores for various leagues and teams.
-        
+
         Args:
             league: The sports league (NBA, NFL, MLB, NHL, Premier League, etc.)
             team: Optional team name to filter results
             days_back: Number of days back to look for games (default: 1)
-            
+
         Returns:
             Dictionary containing sports scores information
         """
         try:
-            logger.info(f"Getting sports scores for league: {league}, team: {team}, days_back: {days_back}")
-            
-            # Mock sports data - in a real application, this would query a sports API
+            # Mock sports data with realistic scores
             mock_scores = {
                 "NBA": [
                     {
@@ -38,7 +36,7 @@ class SportsScoresTools:
                         "time_remaining": "0:00"
                     },
                     {
-                        "game_id": "NBA-002", 
+                        "game_id": "NBA-002",
                         "date": "2024-01-15",
                         "home_team": "Golden State Warriors",
                         "away_team": "Miami Heat",
@@ -74,7 +72,7 @@ class SportsScoresTools:
                     },
                     {
                         "game_id": "NFL-002",
-                        "date": "2024-01-14", 
+                        "date": "2024-01-14",
                         "home_team": "San Francisco 49ers",
                         "away_team": "Dallas Cowboys",
                         "home_score": 31,
@@ -123,11 +121,11 @@ class SportsScoresTools:
                     }
                 ]
             }
-            
+
             # Get scores for the specified league
             if league.upper() in mock_scores:
                 league_scores = mock_scores[league.upper()]
-                
+
                 # Filter by team if specified
                 if team:
                     filtered_scores = []
@@ -135,7 +133,7 @@ class SportsScoresTools:
                         if team.lower() in game["home_team"].lower() or team.lower() in game["away_team"].lower():
                             filtered_scores.append(game)
                     league_scores = filtered_scores
-                
+
                 return {
                     "league": league.upper(),
                     "team_filter": team,
@@ -152,14 +150,14 @@ class SportsScoresTools:
                     "total_games": 0,
                     "message": f"No data available for league: {league}"
                 }
-                
+
         except Exception as e:
-            logger.error(f"❌ Failed to get sports scores: {e}")
+            logger.error(f"Error retrieving sports scores: {e}")
             return {
                 "league": league,
                 "team_filter": team,
                 "days_back": days_back,
                 "games": [],
                 "total_games": 0,
-                "message": f"Error retrieving sports scores: {e}"
+                "error": f"Error retrieving sports scores: {e}"
             }
