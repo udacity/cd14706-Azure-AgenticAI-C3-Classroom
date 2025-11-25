@@ -1,13 +1,13 @@
-# lesson-5-integrating-external-tools-and-apis-with-openai-and-python/exercises/solution/main.py - External API Integration Testing
+# lesson-6-creating-web-search-agents-with-python/exercises/solution/main.py - Ecommerce Web Search Agent
 """
-External API Integration Testing for Ecommerce Agent
+Ecommerce Web Search Agent with Bing Integration
 
 This demo focuses on:
-- Testing external API integrations with Semantic Kernel
-- Demonstrating real-time data from multiple external services
-- API error handling and fallback mechanisms
-- Comprehensive external data aggregation
-- Live API response validation and processing
+- Web search integration for product research and ecommerce data
+- Demonstrating real-time product information from web sources
+- Price comparison and product review aggregation
+- Comprehensive ecommerce data collection and analysis
+- Live web search response validation and processing
 """
 
 import os
@@ -44,84 +44,43 @@ logger = logging.getLogger(__name__)
 
 
 def create_kernel():
-    """Create and configure Semantic Kernel with Azure services and tools"""
     try:
-        logger.info("🚀 Starting Semantic Kernel setup...")
-        
-        # Get Azure configuration
-        logger.info("📋 Retrieving Azure OpenAI configuration from environment variables...")
-        AZURE_OPENAI_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
-        AZURE_OPENAI_API_VERSION = os.environ["AZURE_OPENAI_API_VERSION"]
-        DEPLOYMENT_CHAT = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]
-        DEPLOYMENT_EMBED = os.environ["AZURE_OPENAI_EMBED_DEPLOYMENT"]
-        AZURE_OPENAI_KEY = os.environ["AZURE_OPENAI_KEY"]
-        
-        logger.info(f"✅ Configuration loaded - Endpoint: {AZURE_OPENAI_ENDPOINT}")
-        logger.info(f"📊 Chat deployment: {DEPLOYMENT_CHAT}, Embedding deployment: {DEPLOYMENT_EMBED}")
-        
-        # Create kernel
-        logger.info("🔧 Creating Semantic Kernel instance...")
+        logger.info("🚀 Initializing Semantic Kernel with Bing Search tool...")
+
+        endpoint = os.environ["AZURE_OPENAI_ENDPOINT"]
+        api_version = os.environ["AZURE_OPENAI_API_VERSION"]
+        chat_deployment = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]
+        embed_deployment = os.environ["AZURE_OPENAI_EMBED_DEPLOYMENT"]
+        api_key = os.environ["AZURE_OPENAI_KEY"]
+
         kernel = Kernel()
-        
-        # Add Azure services
-        logger.info("🤖 Adding Azure Chat Completion service...")
+
         kernel.add_service(
             AzureChatCompletion(
-                deployment_name=DEPLOYMENT_CHAT,
-                endpoint=AZURE_OPENAI_ENDPOINT,
-                api_key=AZURE_OPENAI_KEY,
-                api_version=AZURE_OPENAI_API_VERSION
+                deployment_name=chat_deployment,
+                endpoint=endpoint,
+                api_key=api_key,
+                api_version=api_version
             )
         )
-        logger.info("✅ Azure Chat Completion service added successfully")
-        
-        logger.info("🧠 Adding Azure Text Embedding service...")
+
         kernel.add_service(
             AzureTextEmbedding(
-                deployment_name=DEPLOYMENT_EMBED,
-                endpoint=AZURE_OPENAI_ENDPOINT,
-                api_key=AZURE_OPENAI_KEY,
-                api_version=AZURE_OPENAI_API_VERSION
+                deployment_name=embed_deployment,
+                endpoint=endpoint,
+                api_key=api_key,
+                api_version=api_version
             )
         )
-        logger.info("✅ Azure Text Embedding service added successfully")
-        
-        # Add tools as SK plugins
-        logger.info("🛠️ Adding custom tools as Semantic Kernel plugins...")
-        kernel.add_plugin(OrderStatusTools(), "order_status")
-        logger.info("✅ OrderStatusTools plugin added successfully")
-        
-        kernel.add_plugin(ProductInfoTools(), "product_info")
-        logger.info("✅ ProductInfoTools plugin added successfully")
-        
-        # Add external API tools
-        kernel.add_plugin(InventoryTools(), "inventory")
-        logger.info("✅ InventoryTools plugin added successfully")
-        
-        kernel.add_plugin(ShippingTools(), "shipping")
-        logger.info("✅ ShippingTools plugin added successfully")
-        
-        kernel.add_plugin(PricingTools(), "pricing")
-        logger.info("✅ PricingTools plugin added successfully")
-        
-        kernel.add_plugin(RecommendationTools(), "recommendations")
-        logger.info("✅ RecommendationTools plugin added successfully")
-        
-        kernel.add_plugin(ReviewTools(), "reviews")
-        logger.info("✅ ReviewTools plugin added successfully")
 
+        # Register Bing ecommerce search plugin
         kernel.add_plugin(SearchTools(), "ecommerce_search")
-        logger.info("✅ SearchTools plugin added successfully")
+        logger.info("✅ SearchTools plugin registered")
 
-        
-        logger.info("🎉 Semantic Kernel setup completed successfully!")
         return kernel
-        
-    except KeyError as e:
-        logger.error(f"❌ Missing required environment variable: {e}")
-        raise
+
     except Exception as e:
-        logger.error(f"❌ Failed to create Semantic Kernel: {e}")
+        logger.error(f"❌ Kernel initialization failed: {e}")
         raise
 
 
@@ -392,25 +351,19 @@ from semantic_kernel.functions.function_result import FunctionResult
 
 async def test_ecommerce_search(kernel: Kernel):
     """Test the ecommerce search integration using Azure AI Foundry"""
-    logger.info("\n🛍️ Testing Ecommerce Search Tool")
+    logger.info("\n🛍️ Testing Ecommerce Search Tools")
     logger.info("-" * 40)
 
     try:
+        # Test product search
+        logger.info("\n📱 Testing Product Search")
         search_func = kernel.plugins["ecommerce_search"].functions["product_web_search"]
         args = KernelArguments(query="wireless headphones best 2024", max_results=3)
 
         result: FunctionResult = await kernel.invoke(search_func, args)
-
-        # FunctionResult -> extract value
         result_value = result.value
 
-        # Optional: log the result value and type
-        # logger.info("🧪 Raw result value: %s", result_value)
-        # logger.info("📦 Unwrapped type: %s", type(result_value))
-
-        # Ensure it's a list (you returned a list of dicts in SearchTools)
         if isinstance(result_value, str):
-            # Possibly returned a JSON string
             result_value = json.loads(result_value)
 
         for i, item in enumerate(result_value, 1):
@@ -418,16 +371,52 @@ async def test_ecommerce_search(kernel: Kernel):
             logger.info(f"   URL: {item.get('url', 'No URL')}")
             logger.info(f"   Snippet: {item.get('snippet', 'No snippet')}")
         
-        logger.info("✅ Bing Search Results successfully integrated!")
+        logger.info("✅ Product Search Results successfully integrated!")
+
+        # Test price comparison search
+        logger.info("\n💰 Testing Price Comparison Search")
+        price_func = kernel.plugins["ecommerce_search"].functions["price_comparison_search"]
+        price_args = KernelArguments(product_name="Sony WH-1000XM5", max_results=3)
+
+        price_result: FunctionResult = await kernel.invoke(price_func, price_args)
+        price_value = price_result.value
+
+        if isinstance(price_value, str):
+            price_value = json.loads(price_value)
+
+        for i, item in enumerate(price_value, 1):
+            logger.info(f"{i}. {item.get('title', 'No title')}")
+            logger.info(f"   URL: {item.get('url', 'No URL')}")
+            logger.info(f"   Snippet: {item.get('snippet', 'No snippet')}")
+        
+        logger.info("✅ Price Comparison Results successfully integrated!")
+
+        # Test product review search
+        logger.info("\n⭐ Testing Product Review Search")
+        review_func = kernel.plugins["ecommerce_search"].functions["product_review_search"]
+        review_args = KernelArguments(product_name="iPhone 15 Pro", max_results=3)
+
+        review_result: FunctionResult = await kernel.invoke(review_func, review_args)
+        review_value = review_result.value
+
+        if isinstance(review_value, str):
+            review_value = json.loads(review_value)
+
+        for i, item in enumerate(review_value, 1):
+            logger.info(f"{i}. {item.get('title', 'No title')}")
+            logger.info(f"   URL: {item.get('url', 'No URL')}")
+            logger.info(f"   Snippet: {item.get('snippet', 'No snippet')}")
+        
+        logger.info("✅ Product Review Results successfully integrated!")
 
     except Exception as e:
-        logger.error(f"❌ Bing Search test failed: {e}")
+        logger.error(f"❌ Ecommerce Search test failed: {e}")
 
 
 
-async def test_api_integration_scenarios():
-    """Test realistic API integration scenarios"""
-    logger.info("\n🎭 Testing Realistic API Integration Scenarios")
+async def test_ecommerce_search_scenarios(kernel: Kernel):
+    """Test realistic ecommerce search scenarios"""
+    logger.info("\n🎭 Testing Realistic Ecommerce Search Scenarios")
     logger.info("=" * 60)
     
     # Initialize tools
@@ -437,17 +426,29 @@ async def test_api_integration_scenarios():
     recommendation_tools = RecommendationTools()
     review_tools = ReviewTools()
     
-    # Scenario 1: Product Research
-    logger.info("\n📱 Scenario 1: Product Research with Multiple APIs")
+    # Scenario 1: Product Research with Web Search
+    logger.info("\n📱 Scenario 1: Product Research with Web Search Integration")
     logger.info("-" * 50)
     try:
-        product_id = "PROD-001"
+        product_name = "Sony WH-1000XM5"
         
-        # Get product info
-        logger.info(f"🔍 Researching product: {product_id}")
+        # Get product info from web search
+        logger.info(f"🔍 Researching product: {product_name}")
+        
+        search_func = kernel.plugins["ecommerce_search"].functions["product_web_search"]
+        search_args = KernelArguments(query=f"{product_name} specifications features", max_results=3)
+        search_result = await kernel.invoke(search_func, search_args)
+        search_data = search_result.value
+        
+        if isinstance(search_data, str):
+            search_data = json.loads(search_data)
+        
+        logger.info(f"   🌐 Web Search Results: {len(search_data)} sources found")
+        for i, item in enumerate(search_data[:2], 1):
+            logger.info(f"   {i}. {item.get('title', 'No title')[:50]}...")
         
         # Check inventory
-        inventory = inventory_tools.check_inventory(product_id)
+        inventory = inventory_tools.check_inventory("PROD-001")
         stock_info = inventory.get('inventory_check', {}).get('products', [{}])[0]
         logger.info(f"   📊 Stock: {stock_info.get('quantity_available_for_sale', 0)} units available")
         
@@ -456,76 +457,82 @@ async def test_api_integration_scenarios():
         market_price = pricing.get('pricing_analysis', {}).get('average_price', 0)
         logger.info(f"   💰 Market Price: ${market_price}")
         
-        # Get reviews
-        reviews = review_tools.get_product_reviews(product_id, limit=3)
-        review_data = reviews.get('review_data', {})
-        logger.info(f"   ⭐ Rating: {review_data.get('average_rating', 0)}/5 ({review_data.get('total_reviews', 0)} reviews)")
-        
-        # Get recommendations
-        recommendations = recommendation_tools.get_product_recommendations(product_id=product_id, limit=2)
-        rec_products = recommendations.get('recommendation_results', {}).get('products', [])
-        logger.info(f"   🎯 Similar Products: {len(rec_products)} recommendations")
-        
-        logger.info("✅ Product research completed successfully!")
+        logger.info("✅ Product research with web search completed successfully!")
         
     except Exception as e:
         logger.error(f"❌ Product research scenario failed: {e}")
     
-    # Scenario 2: Order Processing
-    logger.info("\n📦 Scenario 2: Order Processing with External APIs")
+    # Scenario 2: Price Comparison with Web Search
+    logger.info("\n💰 Scenario 2: Price Comparison with Web Search")
     logger.info("-" * 50)
     try:
-        order_items = ["PROD-001", "PROD-002"]
-        destination_zip = "90210"
+        product_name = "MacBook Pro M3"
         
-        logger.info(f"🛒 Processing order for items: {', '.join(order_items)}")
+        logger.info(f"🛒 Comparing prices for: {product_name}")
         
-        # Check inventory for all items
-        inventory_check = inventory_tools.check_inventory(",".join(order_items))
+        # Get price comparison from web search
+        price_func = kernel.plugins["ecommerce_search"].functions["price_comparison_search"]
+        price_args = KernelArguments(product_name=product_name, max_results=4)
+        price_result = await kernel.invoke(price_func, price_args)
+        price_data = price_result.value
+        
+        if isinstance(price_data, str):
+            price_data = json.loads(price_data)
+        
+        logger.info(f"   💰 Price Comparison Results: {len(price_data)} retailers found")
+        for i, item in enumerate(price_data[:3], 1):
+            logger.info(f"   {i}. {item.get('title', 'No title')[:40]}...")
+        
+        # Check internal inventory
+        inventory_check = inventory_tools.check_inventory("PROD-002")
         available_items = inventory_check.get('inventory_check', {}).get('products_in_stock', 0)
-        logger.info(f"   📊 Available Items: {available_items}/{len(order_items)}")
+        logger.info(f"   📊 Internal Stock: {available_items} units available")
         
         # Calculate shipping
-        shipping = shipping_tools.calculate_shipping("10001", destination_zip, 3.0, "15x10x6", "ground")
+        shipping = shipping_tools.calculate_shipping("10001", "90210", 3.0, "15x10x6", "ground")
         shipping_options = shipping.get('shipping_calculation', {}).get('available_rates', [])
         logger.info(f"   🚚 Shipping Options: {len(shipping_options)} available")
         
-        # Get delivery estimate
-        delivery = shipping_tools.get_delivery_estimate("10001", destination_zip, "ground")
-        delivery_days = delivery.get('delivery_estimate', {}).get('business_days', 0)
-        logger.info(f"   📅 Estimated Delivery: {delivery_days} business days")
-        
-        logger.info("✅ Order processing completed successfully!")
+        logger.info("✅ Price comparison with web search completed successfully!")
         
     except Exception as e:
-        logger.error(f"❌ Order processing scenario failed: {e}")
+        logger.error(f"❌ Price comparison scenario failed: {e}")
     
-    # Scenario 3: Customer Support
-    logger.info("\n🎧 Scenario 3: Customer Support with External Data")
+    # Scenario 3: Customer Support with Review Analysis
+    logger.info("\n🎧 Scenario 3: Customer Support with Web Review Analysis")
     logger.info("-" * 50)
     try:
-        customer_query = "I'm having issues with my wireless headphones"
-        product_id = "PROD-001"
+        product_name = "iPhone 15 Pro"
+        customer_query = "I'm having issues with my iPhone camera"
         
         logger.info(f"🎧 Customer Support Query: {customer_query}")
+        logger.info(f"📱 Analyzing reviews for: {product_name}")
         
-        # Get product reviews for common issues
-        reviews = review_tools.get_product_reviews(product_id, limit=10)
-        review_sources = reviews.get('review_data', {}).get('sources', [])
-        logger.info(f"   ⭐ Reviews Analyzed: {len(review_sources)} sources")
+        # Get product reviews from web search
+        review_func = kernel.plugins["ecommerce_search"].functions["product_review_search"]
+        review_args = KernelArguments(product_name=product_name, max_results=5)
+        review_result = await kernel.invoke(review_func, review_args)
+        review_data = review_result.value
+        
+        if isinstance(review_data, str):
+            review_data = json.loads(review_data)
+        
+        logger.info(f"   ⭐ Web Review Sources: {len(review_data)} sources analyzed")
+        for i, item in enumerate(review_data[:3], 1):
+            logger.info(f"   {i}. {item.get('title', 'No title')[:45]}...")
+        
+        # Get internal reviews for comparison
+        internal_reviews = review_tools.get_product_reviews("PROD-001", limit=10)
+        review_sources = internal_reviews.get('review_data', {}).get('sources', [])
+        logger.info(f"   📊 Internal Reviews: {len(review_sources)} sources")
         
         # Analyze sentiment for insights
-        sentiment = review_tools.analyze_review_sentiment(product_id)
+        sentiment = review_tools.analyze_review_sentiment("PROD-001")
         sentiment_data = sentiment.get('sentiment_results', {})
         key_phrases = sentiment_data.get('key_phrases', [])
         logger.info(f"   🔍 Key Issues Found: {len([p for p in key_phrases if p.get('sentiment') == 'negative'])}")
         
-        # Get competitor analysis for comparison
-        competitor = review_tools.get_competitor_reviews(product_id)
-        comp_data = competitor.get('competitor_analysis', {})
-        logger.info(f"   🏆 Competitor Analysis: {len(comp_data.get('competitors', []))} competitors")
-        
-        logger.info("✅ Customer support analysis completed successfully!")
+        logger.info("✅ Customer support with web review analysis completed successfully!")
         
     except Exception as e:
         logger.error(f"❌ Customer support scenario failed: {e}")
@@ -538,17 +545,18 @@ def main():
     
     try:
         logger.info("=" * 80)
-        logger.info("🎯 External API Integration Testing for Ecommerce Agent")
+        logger.info("🛍️ Ecommerce Web Search Agent with Bing Integration")
         logger.info("=" * 80)
         logger.info("📁 Loading environment variables from .env file...")
+        logger.info("🔍 Initializing ecommerce web search capabilities...")
         
         # Create the kernel
         kernel = create_kernel()
         
         # List available plugins and functions
-        logger.info("\n📋 Available External API Tools:")
+        logger.info("\n📋 Available Ecommerce Search Tools:")
         for plugin_name, plugin in kernel.plugins.items():
-            if plugin_name in ['inventory', 'shipping', 'pricing', 'recommendations', 'reviews']:
+            if plugin_name in ['ecommerce_search', 'inventory', 'shipping', 'pricing', 'recommendations', 'reviews']:
                 logger.info(f"  🔌 {plugin_name.upper()} API:")
                 for function_name, function in plugin.functions.items():
                     logger.info(f"    ⚙️  {function_name}")
@@ -556,16 +564,16 @@ def main():
         # Test individual APIs
         asyncio.run(test_external_apis())
         
-        # Test integration scenarios
-        asyncio.run(test_api_integration_scenarios())
+        # Test ecommerce search scenarios
+        asyncio.run(test_ecommerce_search_scenarios(kernel))
 
         # Test ecommerce search
         asyncio.run(test_ecommerce_search(kernel))
         
         logger.info(f"\n{'='*80}")
-        logger.info("✅ External API Integration Testing completed successfully!")
-        logger.info("🎉 All external APIs tested and working!")
-        logger.info("🏆 Real-time data integration demonstrated!")
+        logger.info("✅ Ecommerce Web Search Agent testing completed successfully!")
+        logger.info("🎉 All search tools tested and working!")
+        logger.info("🏆 Real-time ecommerce data integration demonstrated!")
         logger.info(f"{'='*80}")
         
     except Exception as e:

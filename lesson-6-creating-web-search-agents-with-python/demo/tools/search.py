@@ -1,8 +1,10 @@
-# tools/search.py (updated for sports focus)
+# tools/search.py
 
 from semantic_kernel.functions import kernel_function
 import os
 import json
+import re
+import sys
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 
@@ -33,7 +35,7 @@ class SearchTools:
             client.agents.messages.create(
                 thread_id=thread.id,
                 role="user",
-                content=f"Search for sports information: {query}"
+                content=f"Search for sports information: {query}. Return the results as a JSON array only, with each item containing 'title', 'url', and 'snippet' fields. Do not include any additional text or explanation, only return the JSON array."
             )
 
             client.agents.runs.create_and_process(thread_id=thread.id, agent_id=self.agent_id)
@@ -59,13 +61,36 @@ class SearchTools:
                     "snippet": "No JSON returned by Agent. Check agent instructions or Bing grounding setup."
                 }]
 
-            print("\n🧪 RAW Bing Assistant Response:\n", raw_json[:300])
+            # Print with safe encoding handling
+            try:
+                print("\n🧪 RAW Bing Assistant Response:\n", raw_json[:300])
+            except UnicodeEncodeError:
+                # Fallback for systems with limited encoding support
+                safe_text = raw_json[:300].encode('ascii', 'ignore').decode('ascii')
+                print("\nRAW Bing Assistant Response:\n", safe_text)
+            raw_json = raw_json.strip()
+            if raw_json.startswith("```"):
+                lines = raw_json.split('\n')
+                if lines[0].strip().startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].strip() == "```":
+                    lines = lines[:-1]
+                raw_json = '\n'.join(lines).strip()
             results = json.loads(raw_json)
             return results[:max_results]
 
         except Exception as e:
+            # Handle encoding issues in error messages
+            error_msg = str(e)
+            try:
+                # Try to encode to check if it's safe
+                error_msg.encode('utf-8')
+            except UnicodeEncodeError:
+                # Remove non-ASCII characters if encoding fails
+                error_msg = error_msg.encode('ascii', 'ignore').decode('ascii')
+            
             return [{
                 "title": "Search error",
                 "url": "",
-                "snippet": f"Failed to retrieve sports search results: {e}"
+                "snippet": f"Failed to retrieve sports search results: {error_msg}"
             }]

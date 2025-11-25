@@ -33,7 +33,16 @@ class SearchTools:
             client.agents.messages.create(
                 thread_id=thread.id,
                 role="user",
-                content=f"Search for product information and ecommerce data: {query}"
+                content=f"""Search for product information and ecommerce data: {query}
+
+CRITICAL: You MUST return your response as a valid JSON array ONLY. Do not include any explanation, text, or commentary.
+Return ONLY a JSON array in this exact format:
+[
+  {{"title": "result title", "url": "https://example.com", "snippet": "description"}},
+  {{"title": "result title 2", "url": "https://example2.com", "snippet": "description 2"}}
+]
+
+Return the JSON array and nothing else."""
             )
 
             client.agents.runs.create_and_process(thread_id=thread.id, agent_id=self.agent_id)
@@ -88,7 +97,9 @@ class SearchTools:
             thread = client.agents.threads.create()
 
             client.agents.messages.create(
-                # TODO fill in the missing parameters to search for price comparison for {product_name} across different retailers and marketplaces
+                # TODO: Fill in the missing parameters to search for price comparison for {product_name} across different retailers and marketplaces
+                # Hint: You need thread_id, role, and content parameters
+                # The content should ask Bing to search for price comparison data and return results as JSON
             )
 
             client.agents.runs.create_and_process(thread_id=thread.id, agent_id=self.agent_id)
@@ -143,7 +154,9 @@ class SearchTools:
             thread = client.agents.threads.create()
 
             client.agents.messages.create(
-                # TODO fill in the missing parameters to search for reviews and ratings for {product_name} from review sites, forums, and ecommerce platforms
+                # TODO: Fill in the missing parameters to search for reviews and ratings for {product_name} from review sites, forums, and ecommerce platforms
+                # Hint: You need thread_id, role, and content parameters
+                # The content should ask Bing to search for product reviews and return results as JSON
             )
 
             client.agents.runs.create_and_process(thread_id=thread.id, agent_id=self.agent_id)

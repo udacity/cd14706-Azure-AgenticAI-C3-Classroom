@@ -144,10 +144,20 @@ demo/
 | `No JSON returned by Agent` | Check that Bing grounding is properly connected to your Agent |
 | Search returns generic text | Review Agent prompt instructions and grounding connection |
 | Search not triggering | Ensure `search.py` method is properly wrapped with `@kernel_function` |
+| `'AgentsOperations' object has no attribute 'threads'` | Ensure you're using `azure-ai-projects==1.0.0` (not 2.0.0b2) |
+| Package version conflicts | Use exact versions: `azure-ai-projects==1.0.0` and `azure-ai-agents==1.2.0b3` |
 
 Enable detailed debugging:
 ```python
 logging.basicConfig(level=logging.DEBUG)
+```
+
+**Important Package Versions:**
+This demo requires specific Azure AI package versions for compatibility:
+```
+azure-ai-projects==1.0.0
+azure-ai-agents==1.2.0b3
+azure-identity
 ```
 
 ---

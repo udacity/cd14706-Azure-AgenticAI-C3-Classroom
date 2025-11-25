@@ -1,4 +1,4 @@
-# main.py (updated to focus on sports web search)
+# main.py
 
 import os
 import sys
@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
 from semantic_kernel.functions import KernelArguments
+from semantic_kernel.functions.function_result import FunctionResult
 from tools.search import SearchTools
 
-# Load environment variables
 load_dotenv()
 
 logging.basicConfig(
@@ -50,7 +50,6 @@ def create_kernel():
             )
         )
 
-        # Register Bing sports search plugin
         kernel.add_plugin(SearchTools(), "sports_search")
         logger.info("✅ SearchTools plugin registered")
 
@@ -68,19 +67,17 @@ async def test_sports_web_search(kernel: Kernel):
         search_function = kernel.plugins["sports_search"].functions["sports_web_search"]
         args = KernelArguments(query="latest NBA highlights", max_results=3)
 
-        result = await kernel.invoke(search_function, args)
+        result: FunctionResult = await kernel.invoke(search_function, args)
+        result_value = result.value
 
-        # Handle FunctionResult.value if necessary
-        if hasattr(result, "value"):
-            result = result.value
-        elif isinstance(result, str):
-            result = json.loads(result)
+        if isinstance(result_value, str):
+            result_value = json.loads(result_value)
 
         logger.info("\n🔎 Top Bing Sports Search Results:")
-        for i, item in enumerate(result, 1):
-            logger.info(f"{i}. {item.get('title')}")
-            logger.info(f"   URL: {item.get('url')}")
-            logger.info(f"   Snippet: {item.get('snippet')}\n")
+        for i, item in enumerate(result_value, 1):
+            logger.info(f"{i}. {item.get('title', 'No title')}")
+            logger.info(f"   URL: {item.get('url', 'No URL')}")
+            logger.info(f"   Snippet: {item.get('snippet', 'No snippet')}\n")
 
     except Exception as e:
         logger.error(f"❌ Sports search test failed: {e}")
