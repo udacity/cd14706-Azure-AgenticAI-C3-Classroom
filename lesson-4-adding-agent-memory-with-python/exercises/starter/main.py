@@ -21,6 +21,9 @@ from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.functions import KernelArguments
 from tools.order_status import OrderStatusTools
 from tools.product_info import ProductInfoTools
@@ -42,7 +45,7 @@ def create_kernel():
     """Create and configure Semantic Kernel with Azure services and tools"""
     try:
         logger.info("🚀 Starting Semantic Kernel setup...")
-        
+
         # Get Azure configuration
         logger.info("📋 Retrieving Azure OpenAI configuration from environment variables...")
         AZURE_OPENAI_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
@@ -50,14 +53,14 @@ def create_kernel():
         DEPLOYMENT_CHAT = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]
         DEPLOYMENT_EMBED = os.environ["AZURE_OPENAI_EMBED_DEPLOYMENT"]
         AZURE_OPENAI_KEY = os.environ["AZURE_OPENAI_KEY"]
-        
+
         logger.info(f"✅ Configuration loaded - Endpoint: {AZURE_OPENAI_ENDPOINT}")
         logger.info(f"📊 Chat deployment: {DEPLOYMENT_CHAT}, Embedding deployment: {DEPLOYMENT_EMBED}")
-        
+
         # Create kernel
         logger.info("🔧 Creating Semantic Kernel instance...")
         kernel = Kernel()
-        
+
         # Add Azure services
         logger.info("🤖 Adding Azure Chat Completion service...")
         kernel.add_service(
@@ -69,7 +72,7 @@ def create_kernel():
             )
         )
         logger.info("✅ Azure Chat Completion service added successfully")
-        
+
         logger.info("🧠 Adding Azure Text Embedding service...")
         kernel.add_service(
             AzureTextEmbedding(
@@ -80,18 +83,18 @@ def create_kernel():
             )
         )
         logger.info("✅ Azure Text Embedding service added successfully")
-        
+
         # Add tools as SK plugins
         logger.info("🛠️ Adding custom tools as Semantic Kernel plugins...")
         kernel.add_plugin(OrderStatusTools(), "order_status")
         logger.info("✅ OrderStatusTools plugin added successfully")
-        
+
         kernel.add_plugin(ProductInfoTools(), "product_info")
         logger.info("✅ ProductInfoTools plugin added successfully")
-        
+
         logger.info("🎉 Semantic Kernel setup completed successfully!")
         return kernel
-        
+
     except KeyError as e:
         logger.error(f"❌ Missing required environment variable: {e}")
         raise
@@ -150,19 +153,19 @@ def parse_and_validate_response(response_text: str, query_type: str) -> Customer
     """Parse LLM response and validate against Pydantic models"""
     try:
         logger.info("🔍 Parsing and validating LLM response...")
-        
+
         # Extract JSON from response (handle cases where LLM includes extra text)
         json_start = response_text.find('{')
         json_end = response_text.rfind('}') + 1
-        
+
         if json_start == -1 or json_end == 0:
             raise ValueError("No valid JSON found in response")
-        
+
         json_str = response_text[json_start:json_end]
         response_data = json.loads(json_str)
-        
+
         logger.info("✅ JSON parsed successfully")
-        
+
         # Ensure required fields have defaults if missing
         if "tools_used" not in response_data:
             response_data["tools_used"] = []
@@ -170,10 +173,10 @@ def parse_and_validate_response(response_text: str, query_type: str) -> Customer
             response_data["confidence_score"] = 0.8
         if "follow_up_suggestions" not in response_data:
             response_data["follow_up_suggestions"] = []
-        
+
         # Validate the main response structure
         customer_response = CustomerServiceResponse(**response_data)
-        
+
         # If there's structured data, validate it against the appropriate model
         if customer_response.structured_data:
             if query_type == "order_status":
@@ -185,13 +188,22 @@ def parse_and_validate_response(response_text: str, query_type: str) -> Customer
                     order_data["status"] = "not_found"
                 if order_data.get("items") is None:
                     order_data["items"] = []
-                
+
                 order_response = OrderResponse(**order_data)
                 logger.info(f"✅ Order data validated: {order_response.order_id} - {order_response.status}")
-                
+
             elif query_type == "product_info":
                 # Add fallback values for product data
                 product_data = customer_response.structured_data
+                # Map tool field names to model field names
+                if "in_stock" in product_data:
+                    product_data["availability"] = "in_stock" if product_data["in_stock"] else "out_of_stock"
+                if "reviews" in product_data:
+                    product_data["reviews_count"] = product_data["reviews"]
+                # Map invalid availability values to valid enum values
+                if product_data.get("availability") == "not_available":
+                    product_data["availability"] = "out_of_stock"
+                # Add fallbacks
                 if product_data.get("product_id") is None:
                     product_data["product_id"] = "PROD-UNKNOWN"
                 if product_data.get("name") is None:
@@ -210,13 +222,13 @@ def parse_and_validate_response(response_text: str, query_type: str) -> Customer
                     product_data["rating"] = 0.0
                 if product_data.get("reviews_count") is None:
                     product_data["reviews_count"] = 0
-                
+
                 product_response = ProductResponse(**product_data)
                 logger.info(f"✅ Product data validated: {product_response.product_id} - {product_response.name}")
-        
+
         logger.info("🎉 All Pydantic validation passed!")
         return customer_response
-        
+
     except json.JSONDecodeError as e:
         logger.error(f"❌ JSON parsing failed: {e}")
         raise ValueError(f"Invalid JSON in response: {e}")
@@ -229,74 +241,65 @@ async def process_customer_query_with_memory(kernel: Kernel, query: str, memory:
     """Process a customer query using Semantic Kernel with memory context"""
     try:
         logger.info(f"🤖 Processing customer query with memory: {query}")
-        
+
         # Add user query to memory
         memory.add_conversation("user", query)
-        
+
         # Get conversation context for the prompt
         context = memory.get_context_window(max_tokens=1000)
-        
-        # Create the prompt with memory context
-        prompt = f"""
-{create_customer_service_prompt()}
 
-Previous conversation context:
-{context}
+        # Create chat history with memory context
+        chat_history = ChatHistory()
+        chat_history.add_system_message(f"{create_customer_service_prompt()}\n\nPrevious conversation context:\n{context}")
+        chat_history.add_user_message(f"Current customer query: {query}")
 
-Current customer query: {query}
-"""
-        
-        # Create a function from the prompt
-        customer_service_function = kernel.add_function(
-            function_name="customer_service",
-            plugin_name="customer_service",
-            prompt=prompt
+        # Get chat completion service and enable automatic tool calling
+        chat_service = kernel.get_service(type=ChatCompletionClientBase)
+        execution_settings = kernel.get_prompt_execution_settings_from_service_id(
+            service_id=chat_service.service_id
         )
-        
-        # Execute the function
-        result = await kernel.invoke(customer_service_function)
-        response_text = str(result)
-        
+        execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
+
+        # Execute with automatic tool calling
+        result = await chat_service.get_chat_message_contents(
+            chat_history=chat_history,
+            settings=execution_settings,
+            kernel=kernel
+        )
+        response_text = str(result[0].content) if result else ""
+
         logger.info("📝 Raw LLM response received")
         logger.debug(f"Response: {response_text}")
-        
+
         # Determine query type for validation
         query_type = "general"
         if "order" in query.lower() or "tracking" in query.lower():
             query_type = "order_status"
         elif "product" in query.lower() or "price" in query.lower():
             query_type = "product_info"
-        
+
         # Parse and validate the response
         validated_response = parse_and_validate_response(response_text, query_type)
-        
+
+        # Track tool usage in memory
+        if validated_response.tools_used and validated_response.structured_data:
+            for tool_name in validated_response.tools_used:
+                # Extract relevant input based on query
+                tool_input = {}
+                if tool_name == "order_status" and validated_response.structured_data.get('order_id'):
+                    tool_input = {"order_id": validated_response.structured_data['order_id']}
+                elif tool_name == "product_info" and validated_response.structured_data.get('product_id'):
+                    tool_input = {"product_id": validated_response.structured_data['product_id']}
+
+                # Add tool call to memory
+                memory.add_tool_call(tool_name, tool_input, validated_response.structured_data, success=True)
+                logger.info(f"📞 Tracked tool call in memory: {tool_name}")
+
         # Add assistant response to memory
         memory.add_conversation("assistant", validated_response.human_readable_response)
-        
-        # Add tool calls to memory if any were used
-        for tool in validated_response.tools_used:
-            if tool == "order_status":
-                # Simulate order status tool call
-                order_id = query.split()[-1] if "ORD-" in query else "ORD-12345"
-                memory.add_tool_call("order_status", {"order_id": order_id}, {
-                    "order_id": order_id,
-                    "status": "shipped",
-                    "tracking_number": "TRK789",
-                    "estimated_delivery": "2024-01-20"
-                })
-            elif tool == "product_info":
-                # Simulate product info tool call
-                product_id = query.split()[-1] if "PROD-" in query else "PROD-67890"
-                memory.add_tool_call("product_info", {"product_id": product_id}, {
-                    "product_id": product_id,
-                    "name": "Sample Product",
-                    "price": 29.99,
-                    "category": "Electronics",
-                    "availability": "in_stock"
-                })
-        
+
         return validated_response
-        
+
     except Exception as e:
         logger.error(f"❌ Failed to process customer query: {e}")
         # Add error to memory
@@ -319,54 +322,60 @@ async def run_memory_demo(kernel: Kernel):
             "name": "Order Status Query with Memory",
             "inputs": [
                 "I need to check my order status",
-                "My order number is ORD-12345",
+                "My order number is ORD-001",
                 "Can you tell me more about the items in that order?"
             ]
         },
         {
-            "name": "Product Information with Memory", 
+            "name": "Product Information with Memory",
             "inputs": [
                 "I want to know about a product",
-                "The product ID is PROD-67890",
+                "The product ID is PROD-001",
                 "Is that product still in stock?"
             ]
         },
         {
             "name": "Mixed Query with Memory Context",
             "inputs": [
-                "I have a question about my recent order",
-                "I also want to know about product PROD-11111",
-                "Can you compare the products I've asked about?"
+                "I have a question about order ORD-002",
+                "I also want to know about product PROD-002",
+                "Can you tell me about both the order and product?"
             ]
         }
     ]
-    
+
     for i, scenario in enumerate(demo_scenarios, 1):
         logger.info(f"\n{'='*80}")
         logger.info(f"🎭 Demo Scenario {i}: {scenario['name']}")
         logger.info(f"{'='*80}")
-        
+
         # Create fresh memory for each scenario
         memory = ShortTermMemory(max_items=10, max_tokens=2000)
         logger.info(f"🧠 Created new memory: {memory}")
-        
+
         for step, user_input in enumerate(scenario['inputs'], 1):
             logger.info(f"\n--- Step {step}: {user_input} ---")
-            
+
             # Process the query with memory
             response = await process_customer_query_with_memory(kernel, user_input, memory)
-            
+
+            # Display tools used
+            if response.tools_used:
+                logger.info(f"🔧 Tools Called:")
+                for tool in response.tools_used:
+                    logger.info(f"   - {tool}")
+
             # Display response
             logger.info(f"📝 Agent Response:")
             logger.info(f"   {response.human_readable_response}")
-            
+
             # Show memory state
             memory_summary = memory.get_memory_summary()
             logger.info(f"🧠 Memory State:")
             logger.info(f"   Items: {memory_summary['total_items']}")
             logger.info(f"   Tokens: {memory_summary['total_tokens']}")
             logger.info(f"   Usage: {memory_summary['memory_usage_percent']:.1f}%")
-            
+
             # Show ecommerce context
             customer_context = memory.get_customer_context()
             logger.info(f"🛒 Ecommerce Context:")
@@ -374,18 +383,18 @@ async def run_memory_demo(kernel: Kernel):
             logger.info(f"   Product IDs: {customer_context['product_ids']}")
             logger.info(f"   Recent queries: {len(customer_context['recent_queries'])}")
             logger.info(f"   Tool calls: {len(customer_context['tool_calls'])}")
-        
+
         # Final memory analysis
         logger.info(f"\n📊 Final Memory Analysis for Scenario {i}:")
         logger.info(f"   Total conversation items: {memory.get_memory_summary()['total_items']}")
         logger.info(f"   Total tokens used: {memory.get_memory_summary()['total_tokens']}")
         logger.info(f"   Memory efficiency: {memory.get_memory_summary()['memory_usage_percent']:.1f}%")
-        
+
         # Show context window
         logger.info(f"\n📝 Context Window:")
         context_window = memory.get_context_window(max_tokens=500)
         logger.info(f"   {context_window}")
-        
+
         # Demonstrate memory search
         logger.info(f"\n🔍 Memory Search Demo:")
         search_results = memory.search_memory("order")
@@ -398,23 +407,23 @@ def main():
     """Main function to demonstrate agent memory management"""
     import asyncio
     from datetime import datetime
-    
+
     try:
         logger.info("=" * 80)
         logger.info("🎯 Starting Agent Memory Management Demo")
         logger.info("=" * 80)
         logger.info("📁 Loading environment variables from .env file...")
-        
+
         # Create the kernel
         kernel = create_kernel()
-        
+
         # List available plugins and functions
         logger.info("📋 Available plugins and functions:")
         for plugin_name, plugin in kernel.plugins.items():
             logger.info(f"  🔌 Plugin: {plugin_name}")
             for function_name, function in plugin.functions.items():
                 logger.info(f"    ⚙️  Function: {function_name}")
-        
+
         logger.info("\n🧠 Memory Management Features:")
         logger.info("=" * 50)
         logger.info("  - Short-term memory for customer conversations")
@@ -423,19 +432,19 @@ def main():
         logger.info("  - Tool call history and success tracking")
         logger.info("  - Memory search and retrieval")
         logger.info("  - Automatic context extraction")
-        
+
         logger.info("\n🎭 Running Memory Demo Scenarios")
         logger.info("=" * 50)
-        
+
         # Run the memory demo
         asyncio.run(run_memory_demo(kernel))
-        
+
         logger.info("\n" + "=" * 80)
         logger.info("✅ Memory Management Demo completed successfully!")
         logger.info("🎉 All memory features demonstrated!")
         logger.info("🧠 Agent memory capabilities showcased!")
         logger.info("=" * 80)
-        
+
     except Exception as e:
         logger.error(f"❌ Demo failed: {e}")
         sys.exit(1)

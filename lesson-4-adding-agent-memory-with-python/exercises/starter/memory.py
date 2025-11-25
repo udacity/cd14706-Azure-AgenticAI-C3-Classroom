@@ -48,28 +48,28 @@ class ShortTermMemory:
     def add_conversation(self, role: str, content: str, metadata: Optional[Dict[str, Any]] = None) -> None:
         """
         Add a conversation item to memory.
-        
+
         Args:
             role: 'user', 'assistant', or 'system'
             content: The conversation content
             metadata: Optional additional data (timestamps, tool calls, etc.)
         """
         item = {
-            # TODO: Implement this
+            # TODO: Implement this - add 'role', 'content', 'timestamp', 'tokens', and 'metadata' fields
         }
-        
+
         # Add to memory
-        # TODO: Implement this
+        # TODO: Implement this - append item to self.memory_items
         self.total_tokens += item['tokens']
-        
+
         # Apply eviction strategy if needed
         self._evict_if_needed()
     
-    def add_tool_call(self, tool_name: str, input_data: Dict[str, Any], 
+    def add_tool_call(self, tool_name: str, input_data: Dict[str, Any],
                      output_data: Dict[str, Any], success: bool = True) -> None:
         """
         Add a tool call to memory for ecommerce operations.
-        
+
         Args:
             tool_name: Name of the tool called (order_status, product_info, etc.)
             input_data: Input parameters to the tool (order_id, product_id, etc.)
@@ -78,9 +78,9 @@ class ShortTermMemory:
         """
         content = f"Tool call: {tool_name}"
         metadata = {
-            # TODO: Implement this
+            # TODO: Implement this - add 'type', 'tool_name', 'input', 'output', and 'success' fields
         }
-        
+
         self.add_conversation('assistant', content, metadata)
     
     def add_system_event(self, event: str, data: Optional[Dict[str, Any]] = None) -> None:

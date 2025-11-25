@@ -29,6 +29,8 @@ This demo extends the previous lessons by implementing comprehensive agent memor
 
 ### 3. Memory-Aware Processing
 - **Context-Rich Prompts**: Include conversation history in LLM prompts
+- **Automatic Tool Invocation**: LLM automatically calls sports tools using FunctionChoiceBehavior.Auto()
+- **Real Data Integration**: Memory stores actual tool results, not simulated data
 - **Memory Persistence**: Maintain memory across multiple interactions
 - **Smart Eviction**: Intelligent memory eviction based on usage and importance
 - **Search Capabilities**: Find relevant information from conversation history
@@ -137,8 +139,7 @@ For each scenario, you'll see:
 ## Code Structure
 
 ```
-├── demo.py              # Main demo script
-├── main.py              # Core memory management implementation
+├── demo.py              # Core memory management implementation
 ├── memory.py            # Short-term memory implementation
 ├── state.py             # Agent state management
 ├── synthesis.py         # Response synthesis

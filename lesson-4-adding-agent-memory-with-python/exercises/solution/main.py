@@ -21,6 +21,9 @@ from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.functions import KernelArguments
 from tools.order_status import OrderStatusTools
 from tools.product_info import ProductInfoTools
@@ -192,6 +195,15 @@ def parse_and_validate_response(response_text: str, query_type: str) -> Customer
             elif query_type == "product_info":
                 # Add fallback values for product data
                 product_data = customer_response.structured_data
+                # Map tool field names to model field names
+                if "in_stock" in product_data:
+                    product_data["availability"] = "in_stock" if product_data["in_stock"] else "out_of_stock"
+                if "reviews" in product_data:
+                    product_data["reviews_count"] = product_data["reviews"]
+                # Map invalid availability values to valid enum values
+                if product_data.get("availability") == "not_available":
+                    product_data["availability"] = "out_of_stock"
+                # Add fallbacks
                 if product_data.get("product_id") is None:
                     product_data["product_id"] = "PROD-UNKNOWN"
                 if product_data.get("name") is None:
@@ -210,7 +222,7 @@ def parse_and_validate_response(response_text: str, query_type: str) -> Customer
                     product_data["rating"] = 0.0
                 if product_data.get("reviews_count") is None:
                     product_data["reviews_count"] = 0
-                
+
                 product_response = ProductResponse(**product_data)
                 logger.info(f"✅ Product data validated: {product_response.product_id} - {product_response.name}")
         
@@ -236,26 +248,25 @@ async def process_customer_query_with_memory(kernel: Kernel, query: str, memory:
         # Get conversation context for the prompt
         context = memory.get_context_window(max_tokens=1000)
         
-        # Create the prompt with memory context
-        prompt = f"""
-{create_customer_service_prompt()}
+        # Create chat history with memory context
+        chat_history = ChatHistory()
+        chat_history.add_system_message(f"{create_customer_service_prompt()}\n\nPrevious conversation context:\n{context}")
+        chat_history.add_user_message(f"Current customer query: {query}")
 
-Previous conversation context:
-{context}
-
-Current customer query: {query}
-"""
-        
-        # Create a function from the prompt
-        customer_service_function = kernel.add_function(
-            function_name="customer_service",
-            plugin_name="customer_service",
-            prompt=prompt
+        # Get chat completion service and enable automatic tool calling
+        chat_service = kernel.get_service(type=ChatCompletionClientBase)
+        execution_settings = kernel.get_prompt_execution_settings_from_service_id(
+            service_id=chat_service.service_id
         )
-        
-        # Execute the function
-        result = await kernel.invoke(customer_service_function)
-        response_text = str(result)
+        execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
+
+        # Execute with automatic tool calling
+        result = await chat_service.get_chat_message_contents(
+            chat_history=chat_history,
+            settings=execution_settings,
+            kernel=kernel
+        )
+        response_text = str(result[0].content) if result else ""
         
         logger.info("📝 Raw LLM response received")
         logger.debug(f"Response: {response_text}")
@@ -269,32 +280,24 @@ Current customer query: {query}
         
         # Parse and validate the response
         validated_response = parse_and_validate_response(response_text, query_type)
-        
+
+        # Track tool usage in memory
+        if validated_response.tools_used and validated_response.structured_data:
+            for tool_name in validated_response.tools_used:
+                # Extract relevant input based on query
+                tool_input = {}
+                if tool_name == "order_status" and validated_response.structured_data.get('order_id'):
+                    tool_input = {"order_id": validated_response.structured_data['order_id']}
+                elif tool_name == "product_info" and validated_response.structured_data.get('product_id'):
+                    tool_input = {"product_id": validated_response.structured_data['product_id']}
+
+                # Add tool call to memory
+                memory.add_tool_call(tool_name, tool_input, validated_response.structured_data, success=True)
+                logger.info(f"📞 Tracked tool call in memory: {tool_name}")
+
         # Add assistant response to memory
         memory.add_conversation("assistant", validated_response.human_readable_response)
-        
-        # Add tool calls to memory if any were used
-        for tool in validated_response.tools_used:
-            if tool == "order_status":
-                # Simulate order status tool call
-                order_id = query.split()[-1] if "ORD-" in query else "ORD-12345"
-                memory.add_tool_call("order_status", {"order_id": order_id}, {
-                    "order_id": order_id,
-                    "status": "shipped",
-                    "tracking_number": "TRK789",
-                    "estimated_delivery": "2024-01-20"
-                })
-            elif tool == "product_info":
-                # Simulate product info tool call
-                product_id = query.split()[-1] if "PROD-" in query else "PROD-67890"
-                memory.add_tool_call("product_info", {"product_id": product_id}, {
-                    "product_id": product_id,
-                    "name": "Sample Product",
-                    "price": 29.99,
-                    "category": "Electronics",
-                    "availability": "in_stock"
-                })
-        
+
         return validated_response
         
     except Exception as e:
@@ -319,24 +322,24 @@ async def run_memory_demo(kernel: Kernel):
             "name": "Order Status Query with Memory",
             "inputs": [
                 "I need to check my order status",
-                "My order number is ORD-12345",
+                "My order number is ORD-001",
                 "Can you tell me more about the items in that order?"
             ]
         },
         {
-            "name": "Product Information with Memory", 
+            "name": "Product Information with Memory",
             "inputs": [
                 "I want to know about a product",
-                "The product ID is PROD-67890",
+                "The product ID is PROD-001",
                 "Is that product still in stock?"
             ]
         },
         {
             "name": "Mixed Query with Memory Context",
             "inputs": [
-                "I have a question about my recent order",
-                "I also want to know about product PROD-11111",
-                "Can you compare the products I've asked about?"
+                "I have a question about order ORD-002",
+                "I also want to know about product PROD-002",
+                "Can you tell me about both the order and product?"
             ]
         }
     ]
@@ -355,7 +358,13 @@ async def run_memory_demo(kernel: Kernel):
             
             # Process the query with memory
             response = await process_customer_query_with_memory(kernel, user_input, memory)
-            
+
+            # Display tools used
+            if response.tools_used:
+                logger.info(f"🔧 Tools Called:")
+                for tool in response.tools_used:
+                    logger.info(f"   - {tool}")
+
             # Display response
             logger.info(f"📝 Agent Response:")
             logger.info(f"   {response.human_readable_response}")

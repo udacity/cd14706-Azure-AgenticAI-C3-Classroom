@@ -11,32 +11,32 @@ We add a `ShortTermMemory` to persist recent conversation and tool calls, then i
 memory.add_conversation("user", query)
 context = memory.get_context_window(max_tokens=1000)
 
-prompt = f"""
-{create_customer_service_prompt()}
+# Create chat history with memory context
+chat_history = ChatHistory()
+chat_history.add_system_message(f"{create_customer_service_prompt()}\n\nPrevious conversation context:\n{context}")
+chat_history.add_user_message(f"Current customer query: {query}")
 
-Previous conversation context:
-{context}
-
-Current customer query: {query}
-"""
-customer_service_function = kernel.add_function(
-    function_name="customer_service",
-    plugin_name="customer_service",
-    prompt=prompt,
+# Enable automatic tool calling
+chat_service = kernel.get_service(type=ChatCompletionClientBase)
+execution_settings = kernel.get_prompt_execution_settings_from_service_id(
+    service_id=chat_service.service_id
 )
+execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
 ```
 
-Tool usage is captured in memory to build an e‑commerce context (orders, products) that the agent can reference later.
+The LLM automatically invokes tools when needed using `FunctionChoiceBehavior.Auto()`. Tool results are captured in memory to build an e‑commerce context (orders, products) that the agent can reference later.
 
 ```python
-# Persist tool outcomes (excerpt)
-if tool == "order_status":
-    memory.add_tool_call("order_status", {"order_id": order_id}, {
-        "order_id": order_id,
-        "status": "shipped",
-        "tracking_number": "TRK789",
-        "estimated_delivery": "2024-01-20",
-    })
+# Extract and store actual tool calls from chat history
+for message in result:
+    if hasattr(message, 'items'):
+        for item in message.items:
+            if hasattr(item, 'function_name') and item.function_name:
+                tool_name = item.function_name
+                tool_args = getattr(item, 'arguments', {})
+                tool_result = getattr(item, 'result', None)
+                if tool_result:
+                    memory.add_tool_call(tool_name, tool_args, tool_result)
 ```
 
 We close the loop by appending the assistant’s final response back into memory, keeping the session coherent.
