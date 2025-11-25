@@ -17,6 +17,9 @@ from typing import Optional
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.functions import KernelArguments
 from tools.order_status import OrderStatusTools
 from tools.product_info import ProductInfoTools
@@ -187,36 +190,45 @@ async def process_customer_query(kernel: Kernel, query: str) -> CustomerServiceR
     """Process a customer query using Semantic Kernel and return validated response"""
     try:
         logger.info(f"🤖 Processing customer query: {query}")
-        
-        # Create the prompt with the customer query
-        prompt = f"{create_customer_service_prompt()}\n\nCustomer query: {query}"
-        
-        # Create a function from the prompt
-        customer_service_function = kernel.add_function(
-            function_name="customer_service",
-            plugin_name="customer_service",
-            prompt=prompt
+
+        # Create chat history
+        chat_history = ChatHistory()
+        chat_history.add_system_message(create_customer_service_prompt())
+        chat_history.add_user_message(query)
+
+        # Get the chat completion service
+        chat_service = kernel.get_service(type=ChatCompletionClientBase)
+
+        # Configure execution settings with automatic function calling
+        execution_settings = kernel.get_prompt_execution_settings_from_service_id(
+            service_id=chat_service.service_id
         )
-        
-        # Execute the function
-        result = await kernel.invoke(customer_service_function)
-        response_text = str(result)
-        
+        execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
+
+        # Get the chat completion with automatic tool invocation
+        result = await chat_service.get_chat_message_contents(
+            chat_history=chat_history,
+            settings=execution_settings,
+            kernel=kernel
+        )
+
+        response_text = str(result[0])
+
         logger.info("📝 Raw LLM response received")
         logger.debug(f"Response: {response_text}")
-        
+
         # Determine query type for validation
         query_type = "general"
         if "order" in query.lower() or "tracking" in query.lower():
             query_type = "order_status"
         elif "product" in query.lower() or "price" in query.lower():
             query_type = "product_info"
-        
+
         # Parse and validate the response
         validated_response = parse_and_validate_response(response_text, query_type)
-        
+
         return validated_response
-        
+
     except Exception as e:
         logger.error(f"❌ Failed to process customer query: {e}")
         # Return a fallback response

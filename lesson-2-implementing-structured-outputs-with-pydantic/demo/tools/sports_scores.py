@@ -22,7 +22,7 @@ class SportsScoresTools:
         """
         try:
             logger.info(f"Getting sports scores for league: {league}, team: {team}, days_back: {days_back}")
-            
+
             # Mock sports data - in a real application, this would query a sports API
             mock_scores = {
                 "NBA": [

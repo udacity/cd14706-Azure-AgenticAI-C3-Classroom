@@ -17,6 +17,9 @@ from typing import Optional
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.functions import KernelArguments
 from tools.sports_scores import SportsScoresTools
 from tools.player_stats import PlayerStatsTools
@@ -219,24 +222,34 @@ async def process_sports_query(kernel: Kernel, query: str) -> SportsAnalysisResp
     """Process a sports query using Semantic Kernel and return validated response"""
     try:
         logger.info(f"🏀 Processing sports query: {query}")
-        
-        # Create the prompt with the sports query
-        prompt = f"{create_sports_analysis_prompt()}\n\nSports query: {query}"
-        
-        # Create a function from the prompt
-        sports_analysis_function = kernel.add_function(
-            function_name="sports_analysis",
-            plugin_name="sports_analysis",
-            prompt=prompt
+
+        # Create chat history
+        chat_history = ChatHistory()
+        chat_history.add_system_message(create_sports_analysis_prompt())
+        chat_history.add_user_message(query)
+
+        # Get the chat completion service
+        chat_service = kernel.get_service(type=ChatCompletionClientBase)
+
+        # Configure execution settings with automatic function calling
+        logger.info("🔧 Executing with automatic function calling enabled...")
+        execution_settings = kernel.get_prompt_execution_settings_from_service_id(
+            service_id=chat_service.service_id
         )
-        
-        # Execute the function
-        result = await kernel.invoke(sports_analysis_function)
-        response_text = str(result)
-        
+        execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
+
+        # Get the chat completion with automatic tool invocation
+        result = await chat_service.get_chat_message_contents(
+            chat_history=chat_history,
+            settings=execution_settings,
+            kernel=kernel
+        )
+
+        response_text = str(result[0])
+
         logger.info("📝 Raw LLM response received")
         logger.debug(f"Response: {response_text}")
-        
+
         # Determine query type for validation
         query_type = "general"
         if any(word in query.lower() for word in ["score", "game", "match", "result"]):
@@ -245,10 +258,10 @@ async def process_sports_query(kernel: Kernel, query: str) -> SportsAnalysisResp
             query_type = "player_stats"
         elif any(word in query.lower() for word in ["team", "standings", "record"]):
             query_type = "team_analysis"
-        
+
         # Parse and validate the response
         validated_response = parse_and_validate_response(response_text, query_type)
-        
+
         return validated_response
         
     except Exception as e:

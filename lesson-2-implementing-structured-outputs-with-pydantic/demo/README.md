@@ -1,10 +1,12 @@
 # Sports Analyst with Pydantic Validation Demo
 
-This demo extends the basic Semantic Kernel setup by adding Pydantic validation for structured sports analysis outputs. It demonstrates how to create a sports analyst agent that returns both human-readable responses and validated, structured data for sports queries.
+This demo demonstrates how to build a sports analyst agent using Semantic Kernel with automatic tool invocation and Pydantic validation for structured outputs. It shows how to combine real tool execution with validated, structured data for sports queries.
 
 ## What This Demo Covers
 
+- **Semantic Kernel with Automatic Function Calling**: Using `FunctionChoiceBehavior.Auto()` to automatically invoke sports tools
 - **Pydantic Model Definition**: Creating structured data models for sports analysis
+- **Tool Integration**: Registering and invoking sports tools (`get_sports_scores`, `get_player_stats`)
 - **Structured JSON Output**: Prompting the LLM to return JSON matching Pydantic schemas
 - **Data Validation**: Automatically validating LLM responses against Pydantic models
 - **Sports Analysis Agent**: A complete agent that handles game scores, player stats, and team analysis
@@ -19,12 +21,29 @@ This demo extends the basic Semantic Kernel setup by adding Pydantic validation 
 - `SportsAnalysisResponse`: Main response wrapper with sports-specific metadata
 - **Enums**: `GameStatus`, `LeagueType`, `PlayerPosition` for type safety
 
-### 2. Sports Analysis Tools
-- **Sports Scores Tool**: Get recent game scores across multiple leagues
-- **Player Stats Tool**: Look up detailed player statistics and performance data
+### 2. Sports Analysis Tools (with `@kernel_function` decorator)
+- **Sports Scores Tool** (`get_sports_scores`): Get recent game scores across multiple leagues
+- **Player Stats Tool** (`get_player_stats`): Look up detailed player statistics and performance data
 - **Multi-League Support**: NBA, NFL, MLB, NHL, Premier League
+- **Automatic Invocation**: Tools are automatically called by Semantic Kernel when needed
 
-### 3. Validation Pipeline
+### 3. Automatic Function Calling
+```python
+# Configure execution settings with automatic function calling
+execution_settings = kernel.get_prompt_execution_settings_from_service_id(
+    service_id=chat_service.service_id
+)
+execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
+
+# Get chat completion with automatic tool invocation
+result = await chat_service.get_chat_message_contents(
+    chat_history=chat_history,
+    settings=execution_settings,
+    kernel=kernel
+)
+```
+
+### 4. Validation Pipeline
 - JSON parsing from LLM responses
 - Pydantic model validation for sports data
 - Type checking and data integrity
@@ -75,7 +94,42 @@ For each scenario, you'll see:
 - Analysis insights and predictions
 - Follow-up suggestions
 
+## How It Works
+
+### Step 1: Register Tools as Plugins
+```python
+kernel.add_plugin(SportsScoresTools(), "sports_scores")
+kernel.add_plugin(PlayerStatsTools(), "player_stats")
+```
+Tools decorated with `@kernel_function` are automatically discoverable.
+
+### Step 2: Create Chat History
+```python
+chat_history = ChatHistory()
+chat_history.add_system_message(create_sports_analysis_prompt())
+chat_history.add_user_message(query)
+```
+
+### Step 3: Enable Automatic Function Calling
+```python
+execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
+```
+This allows Semantic Kernel to automatically invoke tools when the LLM needs data.
+
+### Step 4: Invoke and Get Structured Response
+The LLM will:
+1. Determine which tools to call (e.g., `get_sports_scores`, `get_player_stats`)
+2. Semantic Kernel automatically executes those tools
+3. LLM receives the real data and generates a structured JSON response
+4. Response is validated against Pydantic models
+
 ## Key Learning Points
+
+### Automatic Function Calling
+Using `FunctionChoiceBehavior.Auto()` enables Semantic Kernel to automatically invoke registered tools when the LLM determines it needs data to answer a query. This ensures:
+- Real data is retrieved from tools
+- LLM receives actual sports scores and player statistics
+- Accurate, validated responses based on tool outputs
 
 ### Pydantic Model Benefits for Sports Data
 - **Type Safety**: Automatic type checking for sports statistics
@@ -90,6 +144,7 @@ For each scenario, you'll see:
 - **Analysis**: Structured data enables advanced analytics
 
 ### Best Practices Demonstrated
+- **Automatic function calling** with `FunctionChoiceBehavior.Auto()`
 - Clear prompt engineering for sports JSON output
 - Robust error handling and fallbacks
 - Separation of concerns (prompts, validation, display)

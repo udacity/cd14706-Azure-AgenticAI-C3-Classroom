@@ -17,6 +17,9 @@ from typing import Optional
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.functions import KernelArguments
 from tools.order_status import OrderStatusTools
 from tools.product_info import ProductInfoTools
@@ -37,7 +40,7 @@ def create_kernel():
     """Create and configure Semantic Kernel with Azure services and tools"""
     try:
         logger.info("🚀 Starting Semantic Kernel setup...")
-        
+
         # Get Azure configuration
         logger.info("📋 Retrieving Azure OpenAI configuration from environment variables...")
         AZURE_OPENAI_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
@@ -45,14 +48,14 @@ def create_kernel():
         DEPLOYMENT_CHAT = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]
         DEPLOYMENT_EMBED = os.environ["AZURE_OPENAI_EMBED_DEPLOYMENT"]
         AZURE_OPENAI_KEY = os.environ["AZURE_OPENAI_KEY"]
-        
+
         logger.info(f"✅ Configuration loaded - Endpoint: {AZURE_OPENAI_ENDPOINT}")
         logger.info(f"📊 Chat deployment: {DEPLOYMENT_CHAT}, Embedding deployment: {DEPLOYMENT_EMBED}")
-        
+
         # Create kernel
         logger.info("🔧 Creating Semantic Kernel instance...")
         kernel = Kernel()
-        
+
         # Add Azure services
         logger.info("🤖 Adding Azure Chat Completion service...")
         kernel.add_service(
@@ -64,7 +67,7 @@ def create_kernel():
             )
         )
         logger.info("✅ Azure Chat Completion service added successfully")
-        
+
         logger.info("🧠 Adding Azure Text Embedding service...")
         kernel.add_service(
             AzureTextEmbedding(
@@ -75,18 +78,18 @@ def create_kernel():
             )
         )
         logger.info("✅ Azure Text Embedding service added successfully")
-        
+
         # Add tools as SK plugins
         logger.info("🛠️ Adding custom tools as Semantic Kernel plugins...")
         kernel.add_plugin(OrderStatusTools(), "order_status")
         logger.info("✅ OrderStatusTools plugin added successfully")
-        
+
         kernel.add_plugin(ProductInfoTools(), "product_info")
         logger.info("✅ ProductInfoTools plugin added successfully")
-        
+
         logger.info("🎉 Semantic Kernel setup completed successfully!")
         return kernel
-        
+
     except KeyError as e:
         logger.error(f"❌ Missing required environment variable: {e}")
         raise
@@ -147,22 +150,22 @@ def parse_and_validate_response(response_text: str, query_type: str) -> Customer
     """Parse LLM response and validate against Pydantic models"""
     try:
         logger.info("🔍 Parsing and validating LLM response...")
-        
+
         # Extract JSON from response (handle cases where LLM includes extra text)
         json_start = response_text.find('{')
         json_end = response_text.rfind('}') + 1
-        
+
         if json_start == -1 or json_end == 0:
             raise ValueError("No JSON found in response")
-        
+
         json_str = response_text[json_start:json_end]
         response_data = json.loads(json_str)
-        
+
         logger.info("✅ JSON parsed successfully")
-        
+
         # Validate the main response structure
         customer_response = CustomerServiceResponse(**response_data)
-        
+
         # If there's structured data, validate it against the appropriate model
         if customer_response.structured_data:
             if query_type == "order_status":
@@ -171,10 +174,10 @@ def parse_and_validate_response(response_text: str, query_type: str) -> Customer
             elif query_type == "product_info":
                 product_data = ProductResponse(**customer_response.structured_data)
                 logger.info(f"✅ Product data validated: {product_data.product_id} - {product_data.name}")
-        
+
         logger.info("🎉 All Pydantic validation passed!")
         return customer_response
-        
+
     except json.JSONDecodeError as e:
         logger.error(f"❌ JSON parsing failed: {e}")
         raise ValueError(f"Invalid JSON in response: {e}")
@@ -187,36 +190,46 @@ async def process_customer_query(kernel: Kernel, query: str) -> CustomerServiceR
     """Process a customer query using Semantic Kernel and return validated response"""
     try:
         logger.info(f"🤖 Processing customer query: {query}")
-        
-        # Create the prompt with the customer query
-        prompt = f"{create_customer_service_prompt()}\n\nCustomer query: {query}"
-        
-        # Create a function from the prompt
-        customer_service_function = kernel.add_function(
-            function_name="customer_service",
-            plugin_name="customer_service",
-            prompt=prompt
+
+        # Create chat history
+        chat_history = ChatHistory()
+        chat_history.add_system_message(create_customer_service_prompt())
+        chat_history.add_user_message(query)
+
+        # Get the chat completion service
+        chat_service = kernel.get_service(type=ChatCompletionClientBase)
+
+        # Configure execution settings with automatic function calling
+        logger.info("🔧 Executing with automatic function calling enabled...")
+        execution_settings = kernel.get_prompt_execution_settings_from_service_id(
+            service_id=chat_service.service_id
         )
-        
-        # Execute the function
-        result = await kernel.invoke(customer_service_function)
-        response_text = str(result)
-        
+        execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
+
+        # Get the chat completion with automatic tool invocation
+        result = await chat_service.get_chat_message_contents(
+            chat_history=chat_history,
+            settings=execution_settings,
+            kernel=kernel
+        )
+
+        response_text = str(result[0])
+
         logger.info("📝 Raw LLM response received")
         logger.debug(f"Response: {response_text}")
-        
+
         # Determine query type for validation
         query_type = "general"
         if "order" in query.lower() or "tracking" in query.lower():
             query_type = "order_status"
         elif "product" in query.lower() or "price" in query.lower():
             query_type = "product_info"
-        
+
         # Parse and validate the response
         validated_response = parse_and_validate_response(response_text, query_type)
-        
+
         return validated_response
-        
+
     except Exception as e:
         logger.error(f"❌ Failed to process customer query: {e}")
         # Return a fallback response
@@ -238,30 +251,30 @@ async def run_demo_scenarios(kernel: Kernel):
         "I need help with my order ORD-999 that doesn't exist",
         "What products do you have available?"
     ]
-    
+
     for i, query in enumerate(demo_queries, 1):
         logger.info(f"\n{'='*60}")
         logger.info(f"🎭 Demo Scenario {i}: {query}")
         logger.info(f"{'='*60}")
-        
+
         try:
             # Process the query
             response = await process_customer_query(kernel, query)
-            
+
             # Display results
             logger.info(f"📝 Human-readable response:")
             logger.info(f"   {response.human_readable_response}")
-            
+
             logger.info(f"🔧 Tools used: {', '.join(response.tools_used)}")
             logger.info(f"📊 Confidence score: {response.confidence_score}")
             logger.info(f"💡 Follow-up suggestions: {', '.join(response.follow_up_suggestions)}")
-            
+
             if response.structured_data:
                 logger.info(f"📋 Structured data:")
                 logger.info(f"   {json.dumps(response.structured_data, indent=2)}")
-            
+
             logger.info(f"✅ Scenario {i} completed successfully!")
-            
+
         except Exception as e:
             logger.error(f"❌ Scenario {i} failed: {e}")
 
@@ -269,35 +282,35 @@ async def run_demo_scenarios(kernel: Kernel):
 def main():
     """Main function to demonstrate structured outputs with Pydantic validation"""
     import asyncio
-    
+
     try:
         logger.info("=" * 60)
         logger.info("🎯 Starting Structured Outputs with Pydantic Demo")
         logger.info("=" * 60)
         logger.info("📁 Loading environment variables from .env file...")
-        
+
         # Create the kernel
         kernel = create_kernel()
-        
+
         # List available plugins and functions
         logger.info("📋 Available plugins and functions:")
         for plugin_name, plugin in kernel.plugins.items():
             logger.info(f"  🔌 Plugin: {plugin_name}")
             for function_name, function in plugin.functions.items():
                 logger.info(f"    ⚙️  Function: {function_name}")
-        
+
         # Run demo scenarios
         logger.info(f"\n{'='*60}")
         logger.info("🎭 Running Demo Scenarios")
         logger.info(f"{'='*60}")
-        
+
         asyncio.run(run_demo_scenarios(kernel))
-        
+
         logger.info(f"\n{'='*60}")
         logger.info("✅ Demo completed successfully!")
         logger.info("🎉 All Pydantic validations passed!")
         logger.info(f"{'='*60}")
-        
+
     except Exception as e:
         logger.error(f"❌ Demo failed: {e}")
         sys.exit(1)
