@@ -4,22 +4,37 @@ from datetime import datetime
 
 class Phase(Enum):
     """Agent state machine phases for customer service processing"""
-    # TODO ADD PHASES
+    # TODO: Add the 8 phases for the state machine workflow
+    Init = "Init"                           # Create session/state; capture initial user goal
+    ClarifyRequirements = "ClarifyRequirements"  # Ask targeted questions until required fields are present
+    PlanTools = "PlanTools"                 # Decide which tools to call and with what args
+    ExecuteTools = "ExecuteTools"           # Call order/product tools (and any others); collect results
+    AnalyzeResults = "AnalyzeResults"       # Process tool outputs and validate data completeness
+    ResolveIssues = "ResolveIssues"         # Handle any problems or edge cases
+    ProduceStructuredOutput = "ProduceStructuredOutput"  # Emit Pydantic-validated JSON (and natural language summary)
+    Done = "Done"                           # Process complete
 
 class AgentState:
-    """Enhanced agent state management with comprehensive tracking"""
-    
+    """Agent state management with comprehensive tracking"""
+
     def __init__(self):
         # Core state
         self.phase: Phase = Phase.Init
         self.session_id: str = self._generate_session_id()
         self.created_at: datetime = datetime.now()
         self.updated_at: datetime = datetime.now()
-        
-        # User requirements (for travel agent)
-        self.destination: Optional[str] = None
-        self.dates: Optional[str] = None
-        self.card: Optional[str] = None
+
+        # TODO: Add phase transition history tracking
+        self.phase_history: List[Dict[str, Any]] = [{
+            "phase": Phase.Init.value,
+            "timestamp": datetime.now(),
+            "trigger": "session_created"
+        }]
+
+        # User requirements (for customer service)
+        self.order_id: Optional[str] = None
+        self.product_id: Optional[str] = None
+        self.customer_id: Optional[str] = None
         
         # General requirements (for any agent)
         self.requirements: Dict[str, Any] = {}
@@ -56,27 +71,111 @@ class AgentState:
         import uuid
         return f"session_{uuid.uuid4().hex[:8]}"
 
-    def advance(self) -> bool:
+    def advance(self, trigger: str = "auto_advance") -> bool:
         """Advance to the next phase in the state machine"""
+        # TODO: Implement phase transition with history tracking
         phase_order = list(Phase)
         try:
             current_index = phase_order.index(self.phase)
             if current_index < len(phase_order) - 1:
+                old_phase = self.phase
                 self.phase = phase_order[current_index + 1]
                 self.updated_at = datetime.now()
+
+                # Record state transition
+                self.phase_history.append({
+                    "from_phase": old_phase.value,
+                    "to_phase": self.phase.value,
+                    "timestamp": datetime.now(),
+                    "trigger": trigger
+                })
                 return True
             else:
+                old_phase = self.phase
                 self.phase = Phase.Done
                 self.updated_at = datetime.now()
+
+                # Record final transition
+                self.phase_history.append({
+                    "from_phase": old_phase.value,
+                    "to_phase": Phase.Done.value,
+                    "timestamp": datetime.now(),
+                    "trigger": trigger
+                })
                 return False
         except (ValueError, IndexError):
+            old_phase = self.phase
             self.phase = Phase.Done
             self.updated_at = datetime.now()
+
+            # Record error transition
+            self.phase_history.append({
+                "from_phase": old_phase.value if old_phase else "Unknown",
+                "to_phase": Phase.Done.value,
+                "timestamp": datetime.now(),
+                "trigger": f"error_recovery: {trigger}"
+            })
             return False
 
     def can_advance(self) -> bool:
         """Check if the agent can advance to the next phase"""
         return self.phase != Phase.Done
+
+    def transition_to(self, new_phase: Phase, trigger: str = "manual_transition") -> bool:
+        """
+        Explicitly transition to a specific phase (with validation).
+        This allows non-linear state transitions (e.g., jumping to ResolveIssues).
+        """
+        # TODO: Implement explicit phase transition with history tracking
+        # IMPORTANT: Never use direct phase assignment (self.phase = X) in main.py
+        # Always call this method to ensure transition history is recorded
+        #
+        # Steps to implement:
+        # 1. Check if new_phase == self.phase (return False if already there)
+        # 2. Save old_phase, update self.phase to new_phase
+        # 3. Update self.updated_at = datetime.now()
+        # 4. Append to self.phase_history with from_phase, to_phase, timestamp, trigger, transition_type="explicit"
+        # 5. Return True
+        pass
+
+    def get_phase_duration(self, phase: Phase) -> Optional[float]:
+        """Calculate how long the agent spent in a specific phase (in seconds)"""
+        # TODO: Implement phase duration calculation
+        entries = [h for h in self.phase_history if h.get("to_phase") == phase.value or h.get("phase") == phase.value]
+        if not entries:
+            return None
+
+        enter_time = None
+        exit_time = None
+
+        for i, entry in enumerate(self.phase_history):
+            if entry.get("to_phase") == phase.value or entry.get("phase") == phase.value:
+                enter_time = entry["timestamp"]
+            if enter_time and i + 1 < len(self.phase_history):
+                next_entry = self.phase_history[i + 1]
+                if next_entry.get("from_phase") == phase.value:
+                    exit_time = next_entry["timestamp"]
+                    break
+
+        if enter_time and exit_time:
+            return (exit_time - enter_time).total_seconds()
+        elif enter_time and self.phase == phase:
+            return (datetime.now() - enter_time).total_seconds()
+        return None
+
+    def get_transition_summary(self) -> str:
+        """Get a human-readable summary of all state transitions"""
+        # TODO: Implement transition summary generation for debugging
+        # This helps visualize the complete state machine flow
+        #
+        # Steps to implement:
+        # 1. Return "No transitions recorded" if self.phase_history is empty
+        # 2. Create summary_lines list with header and separator
+        # 3. Loop through self.phase_history and format each entry showing:
+        #    - Entry number, from_phase → to_phase, trigger, and timestamp
+        # 4. Add footer with total transitions and session duration
+        # 5. Return "\n".join(summary_lines)
+        pass
 
     def set_requirements(self, requirements: Dict[str, Any]) -> None:
         """Set user requirements and validate completeness"""
@@ -86,10 +185,13 @@ class AgentState:
     
     def set_required_fields_for_query_type(self, query_type: str) -> None:
         """Set required fields based on query type"""
+        # TODO: Set required fields based on the query type
         if query_type == "order_status":
             self.required_fields = ["order_id"]
         elif query_type == "product_info":
             self.required_fields = ["product_id"]
+        elif query_type == "customer_service":
+            self.required_fields = ["customer_id"]
         else:
             self.required_fields = []
         self.updated_at = datetime.now()
@@ -165,8 +267,16 @@ class AgentState:
 
     def get_phase_description(self) -> str:
         """Get a human-readable description of the current phase"""
+        # TODO: Add descriptions for each phase
         descriptions = {
-            # TODO ADD PHASE DESCRIPTIONS
+            Phase.Init: "Initialize session and capture user goal",
+            Phase.ClarifyRequirements: "Ask targeted questions to gather required information",
+            Phase.PlanTools: "Decide which tools to call and with what parameters",
+            Phase.ExecuteTools: "Execute planned tools and collect results",
+            Phase.AnalyzeResults: "Process tool outputs and validate data completeness",
+            Phase.ResolveIssues: "Handle any problems or edge cases identified",
+            Phase.ProduceStructuredOutput: "Generate Pydantic-validated JSON and natural language summary",
+            Phase.Done: "Process complete"
         }
         return descriptions.get(self.phase, "Unknown phase")
 
@@ -205,3 +315,67 @@ class AgentState:
     def is_data_complete(self, threshold: float = 0.8) -> bool:
         """Check if data completeness meets the threshold"""
         return self.data_completeness >= threshold
+
+    def snapshot(self) -> Dict[str, Any]:
+        """
+        Create a complete snapshot of current state for debugging/logging.
+        This is useful for in-session state inspection and debugging.
+        """
+        # TODO: Implement state snapshot for debugging
+        return {
+            "session_id": self.session_id,
+            "current_phase": self.phase.value,
+            "phase_description": self.get_phase_description(),
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "session_duration_seconds": (datetime.now() - self.created_at).total_seconds(),
+
+            # Requirements tracking
+            "requirements": self.requirements.copy(),
+            "required_fields": self.required_fields.copy(),
+            "data_completeness": self.data_completeness,
+
+            # Tool tracking
+            "tools_called": self.tools_called.copy(),
+            "tool_results_count": len(self.tool_results),
+            "tool_errors_count": len(self.tool_errors),
+
+            # Issues tracking
+            "active_issues": self.issues.copy(),
+            "resolved_issues": self.resolved_issues.copy(),
+            "resolution_attempts": len(self.resolution_attempts),
+
+            # Output tracking
+            "has_structured_output": self.structured_output is not None,
+            "has_summary": self.natural_language_summary is not None,
+            "citations_count": len(self.citations),
+
+            # State history
+            "total_transitions": len(self.phase_history),
+            "transition_history": [
+                {
+                    "from": h.get("from_phase", h.get("phase")),
+                    "to": h.get("to_phase", "N/A"),
+                    "trigger": h.get("trigger"),
+                    "timestamp": h["timestamp"].isoformat()
+                }
+                for h in self.phase_history
+            ]
+        }
+
+    def print_snapshot(self) -> None:
+        """Print a formatted state snapshot for debugging"""
+        # TODO: Implement formatted snapshot printing
+        snapshot = self.snapshot()
+        print("\n" + "="*80)
+        print(f"STATE SNAPSHOT: {snapshot['session_id']}")
+        print("="*80)
+        print(f"Current Phase: {snapshot['current_phase']} - {snapshot['phase_description']}")
+        print(f"Session Duration: {snapshot['session_duration_seconds']:.1f}s")
+        print(f"Data Completeness: {snapshot['data_completeness']:.1%}")
+        print(f"\nTools Called: {len(snapshot['tools_called'])} ({', '.join(snapshot['tools_called']) if snapshot['tools_called'] else 'None'})")
+        print(f"Active Issues: {len(snapshot['active_issues'])}")
+        print(f"Resolved Issues: {len(snapshot['resolved_issues'])}")
+        print(f"State Transitions: {snapshot['total_transitions']}")
+        print(f"Has Output: {snapshot['has_structured_output']}")
+        print("="*80 + "\n")

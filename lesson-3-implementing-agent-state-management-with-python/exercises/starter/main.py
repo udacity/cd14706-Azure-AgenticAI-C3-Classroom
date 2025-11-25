@@ -21,6 +21,9 @@ from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.functions import KernelArguments
 from tools.order_status import OrderStatusTools
 from tools.product_info import ProductInfoTools
@@ -382,21 +385,22 @@ async def update_agent_state(state: AgentState, response_data: Dict[str, Any], u
                 if tool not in state.tools_called:
                     state.add_tool_call(tool)
         
-        # Determine next phase
+        # TODO: State Management - Transition to next phase based on LLM suggestion
+        # IMPORTANT: Always use transition_to() or advance() - NEVER direct phase assignment
+        # This ensures proper history tracking and trigger recording
         next_phase = response_data.get("next_phase", None)
         if next_phase:
             try:
                 # Try to set specific phase
                 phase_map = {p.value: p for p in Phase}
                 if next_phase in phase_map:
-                    state.phase = phase_map[next_phase]
-                    state.updated_at = datetime.now()
+                    state.transition_to(phase_map[next_phase], trigger=f"llm_suggested_{next_phase}")
                 else:
                     # Advance to next phase if suggestion is invalid
-                    state.advance()
+                    state.advance(trigger="invalid_phase_suggestion")
             except:
                 # Fallback to advancing phase
-                state.advance()
+                state.advance(trigger="error_fallback")
         else:
             # Auto-advance based on current state
             advance_state_automatically(state, response_data)
@@ -464,14 +468,14 @@ def advance_state_automatically(state: AgentState, response_data: Dict[str, Any]
     elif state.phase == Phase.AnalyzeResults:
         # Check if there are issues
         if state.has_issues():
-            state.phase = Phase.ResolveIssues
+            state.transition_to(Phase.ResolveIssues, trigger="issues_detected")
         else:
-            state.phase = Phase.ProduceStructuredOutput
-    
+            state.transition_to(Phase.ProduceStructuredOutput, trigger="analysis_complete")
+
     elif state.phase == Phase.ResolveIssues:
         # Move to produce output if issues resolved
         if not state.has_issues():
-            state.phase = Phase.ProduceStructuredOutput
+            state.transition_to(Phase.ProduceStructuredOutput, trigger="issues_resolved")
         # Otherwise stay in resolve issues
     
     elif state.phase == Phase.ProduceStructuredOutput:
@@ -480,32 +484,68 @@ def advance_state_automatically(state: AgentState, response_data: Dict[str, Any]
 
 
 async def execute_tools_for_state(kernel: Kernel, state: AgentState) -> None:
-    """Execute tools based on current state and requirements"""
+    """Execute tools using LLM automatic tool calling based on current state and requirements"""
+    # TODO: State Management - Use LLM to autonomously decide which tools to call
+    # This replaces hardcoded if/else with FunctionChoiceBehavior.Auto()
     try:
-        logger.info(f"🔧 Executing tools for phase: {state.phase.value}")
-        
-        # Get tool instances
-        order_tools = OrderStatusTools()
-        product_tools = ProductInfoTools()
-        
-        # Execute tools based on requirements
-        if "order_id" in state.requirements:
-            order_id = state.requirements["order_id"]
-            logger.info(f"📦 Getting order status for: {order_id}")
-            result = order_tools.get_order_status(order_id)
-            state.add_tool_call("order_status", result)
-        
-        if "product_id" in state.requirements:
-            product_id = state.requirements["product_id"]
-            logger.info(f"🛍️ Getting product info for: {product_id}")
-            result = product_tools.get_product_info(product_id)
-            state.add_tool_call("product_info", result)
-        
-        # Set analysis results
-        state.set_analysis_results(state.tool_results)
-        
-        logger.info("✅ Tools executed successfully")
-        
+        logger.info(f"🔧 Executing tools with LLM automatic tool calling...")
+
+        # Build a prompt that gives context to the LLM about what tools to call
+        tool_context = f"""
+Based on the customer service requirements, use the available tools to gather the necessary data.
+
+Current Requirements:
+{json.dumps(state.requirements, indent=2)}
+
+Required Fields: {', '.join(state.required_fields) if state.required_fields else 'None'}
+
+Use the order_status and/or product_info tools as needed to fulfill these requirements.
+Provide a brief summary of the data you gathered.
+"""
+
+        # Create chat history
+        chat_history = ChatHistory()
+        chat_history.add_system_message("You are a customer service agent with access to order and product data tools. Use the tools to gather the requested information.")
+        chat_history.add_user_message(tool_context)
+
+        # Get the chat completion service
+        chat_service = kernel.get_service(type=ChatCompletionClientBase)
+
+        # Configure execution settings with automatic function calling
+        logger.info("🤖 Configuring automatic function calling...")
+        execution_settings = kernel.get_prompt_execution_settings_from_service_id(
+            service_id=chat_service.service_id
+        )
+        execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
+
+        # Get the chat completion with automatic tool invocation
+        logger.info("📞 LLM will now automatically call the necessary tools...")
+        result = await chat_service.get_chat_message_contents(
+            chat_history=chat_history,
+            settings=execution_settings,
+            kernel=kernel
+        )
+
+        response_text = str(result[0])
+        logger.info(f"✅ Tool execution complete. LLM response: {response_text[:100]}...")
+
+        # Extract which tools were called by inspecting chat_history
+        # After automatic function calling, the history contains function call/result messages
+        tools_executed = []
+        for message in chat_history.messages:
+            if hasattr(message, 'items') and message.items:
+                for item in message.items:
+                    if hasattr(item, 'name') and item.name:
+                        tool_name = item.name
+                        if tool_name not in tools_executed:
+                            tools_executed.append(tool_name)
+                            state.add_tool_call(tool_name, result=f"Called via automatic function calling")
+                            logger.info(f"📊 Tracked tool call: {tool_name}")
+
+        # Store the tool execution summary
+        state.set_analysis_results({"llm_summary": response_text, "tools_executed": tools_executed})
+        logger.info(f"✅ LLM automatically executed {len(tools_executed)} tool(s)")
+
     except Exception as e:
         logger.error(f"❌ Failed to execute tools: {e}")
         state.add_issue(f"Tool execution error: {e}")
@@ -631,10 +671,29 @@ async def run_state_machine_demo(kernel: Kernel):
                 if state.phase == Phase.Done:
                     logger.info(f"✅ Scenario {i} completed - Agent reached Done state")
                     break
-                    
+
             except Exception as e:
                 logger.error(f"❌ Step {step} failed: {e}")
                 state.add_issue(f"Step {step} error: {e}")
+
+        # TODO: Implement auto-progression loop for state management
+        # After user inputs complete, the workflow must continue through remaining phases
+        #
+        # Required: Create a while loop that continues until state.phase == Phase.Done
+        # For each phase, check conditions and advance/transition appropriately:
+        #
+        # - ClarifyRequirements → PlanTools (when data_completeness >= 0.8)
+        # - PlanTools → ExecuteTools (when requirements are ready)
+        # - ExecuteTools: Call execute_tools_for_state() then advance to AnalyzeResults
+        # - AnalyzeResults → ResolveIssues (if has_issues()) OR ProduceStructuredOutput
+        # - ResolveIssues → ProduceStructuredOutput (after resolving issues)
+        # - ProduceStructuredOutput → Done (after creating structured_output)
+        #
+        # IMPORTANT: Use state.advance(trigger="...") or state.transition_to() with descriptive triggers
+        # Add max_auto_steps safety limit (e.g., 10) to prevent infinite loops
+
+        logger.info("\n🔄 Auto-progression loop not yet implemented")
+        logger.info(f"⚠️  Workflow stopped at phase: {state.phase.value}")
         
         # Final state summary
         logger.info(f"\n📊 Final State Summary for Scenario {i}:")

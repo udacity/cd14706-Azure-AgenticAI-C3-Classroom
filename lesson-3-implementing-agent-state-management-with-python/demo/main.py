@@ -17,10 +17,13 @@ import json
 import logging
 import asyncio
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.functions import KernelArguments
 from tools.sports_scores import SportsScoresTools
 from tools.player_stats import PlayerStatsTools
@@ -128,12 +131,15 @@ CLARIFY REQUIREMENTS PHASE: Ask targeted questions to gather missing information
 - Focus on required fields that are still missing (team, league, player)
 - Ask one clear, specific question at a time
 - Avoid overwhelming the fan with multiple questions
+- Once you have all required information (team/league for scores, player/league for stats), set next_phase to "PlanTools" in your response
+- If the user indicates they're done providing information (e.g., "that's all", "thanks", "that helps"), set next_phase to "PlanTools"
 """,
         Phase.PlanTools: """
 PLAN TOOLS PHASE: Decide which tools to call based on the requirements.
 - Determine if you need sports_scores or player_stats tools
 - Plan the sequence of tool calls
 - Consider what parameters each tool needs (league, team, player)
+- Set next_phase to "ExecuteTools" in your response to proceed with tool execution
 """,
         Phase.ExecuteTools: """
 EXECUTE TOOLS PHASE: Call the planned tools and collect results.
@@ -287,54 +293,6 @@ Always respond with valid JSON that matches these schemas exactly. Provide insig
 """
 
 
-def create_customer_service_prompt() -> str:
-    """Create a prompt that requests structured JSON output"""
-    return """
-You are a helpful customer service agent. You have access to tools to check order status and product information.
-
-When a customer asks about their order or a product, use the appropriate tools and then provide a response in the following JSON format:
-
-{
-    "query_type": "order_status" or "product_info" or "general",
-    "human_readable_response": "A helpful, friendly response to the customer",
-    "structured_data": {
-        // If query_type is "order_status", include order details here
-        // If query_type is "product_info", include product details here
-        // Otherwise, this can be null
-    },
-    "tools_used": ["list", "of", "tools", "used"],
-    "confidence_score": 0.95,
-    "follow_up_suggestions": ["suggestion1", "suggestion2"]
-}
-
-For order status queries, the structured_data should match this format:
-{
-    "order_id": "string",
-    "status": "processing|shipped|delivered|cancelled|not_found|error",
-    "tracking_number": "string or null",
-    "estimated_delivery": "string or null",
-    "items": ["item1", "item2"],
-    "message": "string or null"
-}
-
-For product info queries, the structured_data should match this format:
-{
-    "product_id": "string",
-    "name": "string",
-    "price": 99.99,
-    "category": "string",
-    "description": "string",
-    "availability": "in_stock|out_of_stock|discontinued",
-    "stock_quantity": 50,
-    "rating": 4.5,
-    "reviews_count": 128,
-    "message": "string or null"
-}
-
-Always respond with valid JSON that matches these schemas exactly.
-"""
-
-
 def parse_and_validate_response(response_text: str, query_type: str) -> SportsAnalysisResponse:
     """Parse LLM response and validate against Pydantic models"""
     try:
@@ -386,7 +344,7 @@ async def process_state_transition(kernel: Kernel, state: AgentState, user_input
         
         # Create state-aware prompt
         prompt = create_state_aware_prompt(state)
-        full_prompt = f"{prompt}\n\nCustomer input: {user_input}"
+        full_prompt = f"{prompt}\n\nSports fan input: {user_input}"
         
         # Create function from prompt
         state_function = kernel.add_function(
@@ -438,8 +396,19 @@ async def update_agent_state(state: AgentState, response_data: Dict[str, Any], u
     try:
         # Extract query type and set required fields
         query_type = response_data.get("query_type", "general")
-        state.set_required_fields_for_query_type(query_type)
         
+        # If query_type is general, try to infer it from user input
+        if query_type == "general":
+            user_lower = user_input.lower()
+            if "score" in user_lower or "game" in user_lower or "match" in user_lower:
+                query_type = "game_scores"
+            elif "player" in user_lower or "stats" in user_lower or "statistics" in user_lower or "performance" in user_lower:
+                query_type = "player_stats"
+            elif "team" in user_lower or "analysis" in user_lower or "standings" in user_lower:
+                query_type = "team_analysis"
+
+        state.set_required_fields_for_query_type(query_type)
+
         # Extract requirements from user input and structured data
         extracted_requirements = extract_requirements_from_input(user_input, response_data)
         if extracted_requirements:
@@ -473,14 +442,13 @@ async def update_agent_state(state: AgentState, response_data: Dict[str, Any], u
                 # Try to set specific phase
                 phase_map = {p.value: p for p in Phase}
                 if next_phase in phase_map:
-                    state.phase = phase_map[next_phase]
-                    state.updated_at = datetime.now()
+                    state.transition_to(phase_map[next_phase], trigger=f"llm_suggested_{next_phase}")
                 else:
                     # Advance to next phase if suggestion is invalid
-                    state.advance()
+                    state.advance(trigger="invalid_phase_suggestion")
             except:
                 # Fallback to advancing phase
-                state.advance()
+                state.advance(trigger="error_fallback")
         else:
             # Auto-advance based on current state
             advance_state_automatically(state, response_data)
@@ -536,74 +504,113 @@ def advance_state_automatically(state: AgentState, response_data: Dict[str, Any]
     if state.phase == Phase.Init:
         # Move to clarify requirements if we have basic info
         if response_data.get("query_type") in ["game_scores", "player_stats", "team_analysis"]:
-            state.advance()
+            state.advance(trigger="query_type_identified")
         else:
             # Stay in init to gather more info
             pass
-    
+
     elif state.phase == Phase.ClarifyRequirements:
-        # Move to plan tools if we have enough info or if user seems satisfied
-        if state.data_completeness >= 0.7 or "thank" in response_data.get("human_readable_response", "").lower():
-            state.advance()
-        # Otherwise stay in clarify phase
-    
+        # Move to plan tools if we have all required fields or high data completeness
+        # Check if all required fields are present
+        all_fields_present = all(field in state.requirements for field in state.required_fields) if state.required_fields else False
+
+        # Also check for user satisfaction signals
+        user_satisfied = any(word in response_data.get("human_readable_response", "").lower()
+                           for word in ["thank", "that's all", "that helps", "that's enough", "all set", "done"])
+
+        # Advance if we have all required fields OR high completeness OR user seems satisfied
+        if all_fields_present or state.data_completeness >= 0.8 or user_satisfied:
+            state.advance(trigger="requirements_complete")
+
     elif state.phase == Phase.PlanTools:
-        # Move to execute tools
-        state.advance()
-    
+        # Move to execute tools - we should always execute tools after planning
+        state.advance(trigger="tools_planned")
+
     elif state.phase == Phase.ExecuteTools:
-        # Move to analyze results
-        state.advance()
-    
+        # Move to analyze results after tools are executed
+        state.advance(trigger="tools_executed")
+
     elif state.phase == Phase.AnalyzeResults:
         # Check if there are issues
         if state.has_issues():
-            state.phase = Phase.ResolveIssues
+            state.transition_to(Phase.ResolveIssues, trigger="issues_detected")
         else:
-            state.phase = Phase.ProduceStructuredOutput
-    
+            state.transition_to(Phase.ProduceStructuredOutput, trigger="analysis_complete")
+
     elif state.phase == Phase.ResolveIssues:
         # Move to produce output if issues resolved
         if not state.has_issues():
-            state.phase = Phase.ProduceStructuredOutput
+            state.transition_to(Phase.ProduceStructuredOutput, trigger="issues_resolved")
         # Otherwise stay in resolve issues
-    
+
     elif state.phase == Phase.ProduceStructuredOutput:
         # Move to done
-        state.advance()
+        state.advance(trigger="output_complete")
 
 
 async def execute_tools_for_state(kernel: Kernel, state: AgentState) -> None:
-    """Execute tools based on current state and requirements"""
+    """Execute tools using LLM automatic tool calling based on current state and requirements"""
     try:
-        logger.info(f"🔧 Executing tools for phase: {state.phase.value}")
-        
-        # Get tool instances
-        sports_tools = SportsScoresTools()
-        player_tools = PlayerStatsTools()
-        
-        # Execute tools based on requirements
-        if "team" in state.requirements and "league" in state.requirements:
-            team = state.requirements["team"]
-            league = state.requirements["league"]
-            logger.info(f"🏀 Getting sports scores for: {team} in {league}")
-            result = sports_tools.get_sports_scores(league, team)
-            state.add_tool_call("sports_scores", result)
-        
-        if "player" in state.requirements:
-            player = state.requirements["player"]
-            league = state.requirements.get("league", "NBA")
-            logger.info(f"👤 Getting player stats for: {player} in {league}")
-            result = player_tools.get_player_stats(player, league)
-            state.add_tool_call("player_stats", result)
-        
-        # Set analysis results
-        state.set_analysis_results(state.tool_results)
-        
-        logger.info("✅ Tools executed successfully")
-        
+        logger.info(f"🔧 Executing tools with LLM automatic tool calling...")
+
+        # Build a prompt that gives context to the LLM about what tools to call
+        tool_context = f"""
+Based on the user's sports analysis requirements, use the available tools to gather the necessary data.
+
+Current Requirements:
+{json.dumps(state.requirements, indent=2)}
+
+Required Fields: {', '.join(state.required_fields) if state.required_fields else 'None'}
+
+Use the sports_scores and/or player_stats tools as needed to fulfill these requirements.
+Provide a brief summary of the data you gathered.
+"""
+
+        # Create chat history
+        chat_history = ChatHistory()
+        chat_history.add_system_message("You are a sports analyst with access to sports data tools. Use the tools to gather the requested information.")
+        chat_history.add_user_message(tool_context)
+
+        # Get the chat completion service
+        chat_service = kernel.get_service(type=ChatCompletionClientBase)
+
+        # Configure execution settings with automatic function calling
+        logger.info("🤖 Configuring automatic function calling...")
+        execution_settings = kernel.get_prompt_execution_settings_from_service_id(
+            service_id=chat_service.service_id
+        )
+        execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()
+
+        # Get the chat completion with automatic tool invocation
+        logger.info("📞 LLM will now automatically call the necessary tools...")
+        result = await chat_service.get_chat_message_contents(
+            chat_history=chat_history,
+            settings=execution_settings,
+            kernel=kernel
+        )
+
+        response_text = str(result[0])
+        logger.info(f"✅ Tool execution complete. LLM response: {response_text[:100]}...")
+
+        # Extract which tools were called by inspecting chat_history
+        # After automatic function calling, the history contains function call/result messages
+        tools_executed = []
+        for message in chat_history.messages:
+            if hasattr(message, 'items') and message.items:
+                for item in message.items:
+                    if hasattr(item, 'name') and item.name:
+                        tool_name = item.name
+                        if tool_name not in tools_executed:
+                            tools_executed.append(tool_name)
+                            state.add_tool_call(tool_name, result=f"Called via automatic function calling")
+                            logger.info(f"📊 Tracked tool call: {tool_name}")
+
+        # Store the tool execution summary
+        state.set_analysis_results({"llm_summary": response_text, "tools_executed": tools_executed})
+        logger.info(f"✅ LLM automatically executed {len(tools_executed)} tool(s)")
+
     except Exception as e:
-        logger.error(f"❌ Failed to execute tools: {e}")
+        logger.error(f"❌ Failed to execute tools with LLM: {e}")
         state.add_issue(f"Tool execution error: {e}")
 
 
@@ -716,10 +723,44 @@ async def run_state_machine_demo(kernel: Kernel):
                 logger.info(f"   Tools Called: {', '.join(status['tools_called']) if status['tools_called'] else 'None'}")
                 logger.info(f"   Issues: {', '.join(status['issues']) if status['issues'] else 'None'}")
                 
+                # If we're in PlanTools, advance to ExecuteTools
+                if state.phase == Phase.PlanTools:
+                    all_fields_present = all(field in state.requirements for field in state.required_fields) if state.required_fields else False
+                    if all_fields_present or state.data_completeness >= 0.8:
+                        state.advance(trigger="planning_complete")
+
                 # Execute tools if in ExecuteTools phase
                 if state.phase == Phase.ExecuteTools:
                     await execute_tools_for_state(kernel, state)
-                
+                    if state.phase == Phase.ExecuteTools:
+                        state.advance(trigger="tools_executed")
+
+                # Continue through remaining phases automatically
+                if state.phase == Phase.AnalyzeResults:
+                    if state.has_issues():
+                        state.transition_to(Phase.ResolveIssues, trigger="issues_detected")
+                    else:
+                        state.transition_to(Phase.ProduceStructuredOutput, trigger="analysis_complete")
+
+                if state.phase == Phase.ResolveIssues:
+                    for issue in list(state.issues):
+                        state.resolve_issue(issue)
+                    state.transition_to(Phase.ProduceStructuredOutput, trigger="issues_resolved")
+
+                if state.phase == Phase.ProduceStructuredOutput:
+                    output = {
+                        "session_id": state.session_id,
+                        "query_type": response.get('query_type', 'general'),
+                        "requirements": state.requirements,
+                        "tool_results": state.tool_results,
+                        "data_completeness": state.data_completeness
+                    }
+                    state.set_structured_output(output, "Validated sports analysis complete")
+                    state.advance(trigger="output_generated")
+
+                if state.phase == Phase.Done:
+                    logger.info(f"🎉 Workflow complete!")
+
                 # Show structured data if available
                 if response.get('structured_data'):
                     logger.info(f"📋 Structured Data:")
@@ -733,7 +774,82 @@ async def run_state_machine_demo(kernel: Kernel):
             except Exception as e:
                 logger.error(f"❌ Step {step} failed: {e}")
                 state.add_issue(f"Step {step} error: {e}")
-        
+
+        # After user inputs, auto-progress through remaining phases until Done
+        logger.info(f"\n🔄 Auto-progressing through remaining phases...")
+        max_auto_steps = 10
+        auto_step = 0
+        while state.phase != Phase.Done and auto_step < max_auto_steps:
+            auto_step += 1
+            logger.info(f"\n--- Auto-Step {auto_step}: Current phase {state.phase.value} ---")
+
+            try:
+                # If still in ClarifyRequirements, check if we can advance to PlanTools
+                if state.phase == Phase.ClarifyRequirements:
+                    all_fields_present = all(field in state.requirements for field in state.required_fields) if state.required_fields else False
+                    # In auto-progression, we assume user is done if data_completeness is good
+                    if all_fields_present or state.data_completeness >= 0.8:
+                        logger.info("✅ Requirements gathered, advancing to PlanTools")
+                        state.advance(trigger="requirements_complete")
+
+                # If we're in PlanTools, advance to ExecuteTools
+                if state.phase == Phase.PlanTools:
+                    all_fields_present = all(field in state.requirements for field in state.required_fields) if state.required_fields else False
+                    if all_fields_present or state.data_completeness >= 0.8:
+                        logger.info("✅ Planning complete, advancing to ExecuteTools")
+                        state.advance(trigger="planning_complete")
+
+                # Execute tools if in ExecuteTools phase
+                if state.phase == Phase.ExecuteTools:
+                    await execute_tools_for_state(kernel, state)
+                    if state.phase == Phase.ExecuteTools:
+                        logger.info("✅ Tools executed, advancing to AnalyzeResults")
+                        state.advance(trigger="tools_executed")
+
+                # Continue through remaining phases automatically
+                if state.phase == Phase.AnalyzeResults:
+                    logger.info("🔍 In AnalyzeResults phase - checking for issues...")
+                    if state.has_issues():
+                        logger.info("⚠️ Issues detected, transitioning to ResolveIssues")
+                        state.transition_to(Phase.ResolveIssues, trigger="issues_detected")
+                    else:
+                        logger.info("✅ No issues detected, transitioning to ProduceStructuredOutput")
+                        state.transition_to(Phase.ProduceStructuredOutput, trigger="analysis_complete")
+
+                if state.phase == Phase.ResolveIssues:
+                    logger.info("🔧 Resolving issues...")
+                    for issue in list(state.issues):
+                        logger.info(f"   - Resolving: {issue}")
+                        state.resolve_issue(issue)
+                    logger.info("✅ Issues resolved, transitioning to ProduceStructuredOutput")
+                    state.transition_to(Phase.ProduceStructuredOutput, trigger="issues_resolved")
+
+                if state.phase == Phase.ProduceStructuredOutput:
+                    logger.info("📋 Producing structured Pydantic-validated output...")
+                    output = {
+                        "session_id": state.session_id,
+                        "query_type": "general",
+                        "requirements": state.requirements,
+                        "tool_results": state.tool_results,
+                        "data_completeness": state.data_completeness
+                    }
+                    state.set_structured_output(output, "Validated sports analysis complete")
+                    logger.info("✅ Structured output created and validated")
+                    logger.info(f"   Output keys: {list(output.keys())}")
+                    state.advance(trigger="output_generated")
+
+                if state.phase == Phase.Done:
+                    logger.info(f"🎉 Reached Done phase - workflow complete!")
+                    break
+
+            except Exception as e:
+                logger.error(f"❌ Auto-step {auto_step} failed: {e}")
+                state.add_issue(f"Auto-step {auto_step} error: {e}")
+                break
+
+        if state.phase != Phase.Done:
+            logger.warning(f"⚠️ Workflow did not reach Done state. Stopped at: {state.phase.value}")
+
         # Final state summary
         logger.info(f"\n📊 Final State Summary for Scenario {i}:")
         final_status = state.get_status_summary()
@@ -742,6 +858,10 @@ async def run_state_machine_demo(kernel: Kernel):
         logger.info(f"   Data Completeness: {final_status['data_completeness']:.1%}")
         logger.info(f"   Issues Resolved: {len(final_status['resolved_issues'])}")
         logger.info(f"   Has Structured Output: {final_status['has_structured_output']}")
+
+        # Show state transition history
+        logger.info(f"\n📈 State Transition History for Scenario {i}:")
+        logger.info(state.get_transition_summary())
 
 
 def main():

@@ -1,14 +1,16 @@
 # Sports Analyst Agent State Management with State Machine Demo
 
-This demo extends the previous lessons by implementing comprehensive agent state management with a finite state machine for sports analysis. It demonstrates how to track agent context and progress across interactions, manage state transitions, and maintain conversation flow for sports fans.
+This demo implements comprehensive agent state management with a finite state machine for sports analysis. It demonstrates how to track agent context and progress across interactions, manage state transitions, and maintain conversation flow for sports fans.
 
 ## What This Demo Covers
 
 - **State Machine Design**: Implementing a finite state machine with clear phases for sports analysis
-- **State Transitions**: Managing transitions between different agent states
+- **State Transitions with History**: Managing transitions with history tracking and trigger recording
 - **Context Tracking**: Maintaining conversation context and sports requirements
-- **Progress Monitoring**: Tracking data completeness and tool execution
+- **Progress Monitoring**: Tracking data completeness, tool execution, and phase durations
+- **Transition History**: Complete audit trail of state changes with timestamps and triggers
 - **Issue Resolution**: Handling problems and edge cases systematically
+- **State Snapshots**: Real-time debugging and monitoring of agent state
 - **Pydantic Validation**: Structured outputs with validated sports data
 
 ## Key Features
@@ -23,18 +25,36 @@ This demo extends the previous lessons by implementing comprehensive agent state
 - **ProduceStructuredOutput**: Emit Pydantic-validated JSON and natural language sports analysis
 - **Done**: Process complete
 
-### 2. State Management
-- **Session Tracking**: Unique session IDs and timestamps
+### 2. Comprehensive State Management
+- **Session Tracking**: Unique session IDs with creation and update timestamps
 - **Sports Requirements Management**: Dynamic requirement gathering for teams, leagues, and players
 - **Tool Execution Tracking**: Record of sports tools called and their results
 - **Issue Resolution**: Systematic problem identification and resolution
 - **Data Completeness**: Automatic calculation of sports data completeness percentage
+- **Phase Transition History**: Complete audit trail of all state changes with triggers
+- **Phase Duration Tracking**: Calculate time spent in each phase
+- **State Snapshots**: Real-time state inspection for debugging and monitoring
+- **Transition Triggers**: Every transition has explicit, descriptive triggers:
+  - `query_type_identified` - Identified user's query type (game_scores, player_stats, team_analysis)
+  - `requirements_complete` - All required fields gathered or user satisfied
+  - `tools_planned` - Tool execution plan created
+  - `tools_executed` - Sports data tools completed
+  - `issues_detected` - Problems found requiring resolution
+  - `analysis_complete` - Analysis validated with no issues
+  - `issues_resolved` - All problems successfully handled
+  - `output_complete` / `output_generated` - Final structured output generated
+  - `llm_suggested_{phase}` - LLM suggested specific phase transition
+  - `invalid_phase_suggestion` - LLM suggestion invalid, using fallback
+  - `error_fallback` - Exception occurred, using recovery path
 
 ### 3. State-Aware Processing
 - **Sports Context-Aware Prompts**: LLM prompts that include current state information for sports analysis
-- **Automatic State Transitions**: Smart progression through state machine phases
-- **Error Handling**: Graceful handling of state transition errors
+- **Automatic State Transitions**: Smart progression through state machine phases with explicit, descriptive triggers
+- **Manual State Transitions**: All phase transitions use `transition_to()` for proper history tracking (never direct phase assignment)
+- **LLM-Suggested Transitions**: LLM phase suggestions recorded with `llm_suggested_{phase}` trigger
+- **Error Handling**: Graceful handling of state transition errors with recovery and explicit triggers
 - **Progress Monitoring**: Real-time tracking of sports analysis progress and issues
+- **Transition Timeline**: Human-readable summary of all state changes with descriptive triggers and timestamps
 
 ## Prerequisites
 
@@ -94,11 +114,13 @@ The demo will run through three comprehensive scenarios that showcase the state 
 **State progression:** Init → ClarifyRequirements → PlanTools → ExecuteTools → AnalyzeResults → ResolveIssues → ProduceStructuredOutput → Done
 
 For each scenario, you'll see:
-- **State Transitions**: Clear progression through each phase
+- **State Transitions**: Clear progression through each phase with triggers
 - **Sports Context Tracking**: Team/league/player requirements, tools called, and data completeness
 - **Issue Management**: Problem identification and resolution
 - **Structured Sports Outputs**: Pydantic-validated sports analysis responses
-- **Progress Monitoring**: Real-time state summaries
+- **Progress Monitoring**: Real-time state summaries with completion status
+- **Transition History**: Complete timeline of state changes with timestamps
+- **Phase Duration Metrics**: Time spent in each phase of the workflow
 
 ## Key Learning Points
 
@@ -122,9 +144,14 @@ For each scenario, you'll see:
 
 ### Best Practices Demonstrated
 - **Separation of Concerns**: Clear separation between state management, tool execution, and response generation
-- **Error Handling**: Robust error handling at each state transition
+- **Proper Transition Tracking**: Always use `transition_to()` or `advance()` - never direct phase assignment
+- **Explicit Triggers**: Every state transition has a descriptive trigger for debugging (no generic "auto_advance")
+- **Error Handling**: Robust error handling at each state transition with explicit error triggers
 - **Progress Monitoring**: Real-time visibility into agent progress and issues
 - **Extensibility**: Easy to add new states and transitions
+- **Complete Audit Trail**: Full history of state transitions with descriptive triggers for debugging and analysis
+- **In-Session State Management**: Stateful processing within a session without persistent storage
+- **Summary Logging**: Concise output with essential workflow information and transition history
 
 ## Code Structure
 
@@ -132,9 +159,9 @@ For each scenario, you'll see:
 ├── main.py              # Main demo with sports analyst state machine implementation
 ├── state.py             # Agent state management and state machine
 ├── models.py            # Pydantic model definitions for sports data
-├── tools/               # Semantic Kernel tools for sports analysis
-│   ├── sports_scores.py
-│   └── player_stats.py
+├── tools/               # Semantic Kernel tools
+│   ├── sports_scores.py    # Sports scores tool for game data
+│   └── player_stats.py     # Player statistics tool
 └── requirements.txt     # Dependencies
 ```
 
@@ -148,16 +175,47 @@ Done ← ProduceStructuredOutput ← ResolveIssues ←────────�
 ```
 
 ### Key Components
-- **AgentState**: Core state management class with phase tracking
-- **Phase Enum**: Defines all possible agent states
-- **State Transitions**: Automatic and manual state progression
-- **Context Tracking**: Requirements, tools, issues, and progress
-- **Error Handling**: Graceful handling of state transition failures
+- **AgentState**: Core state management class with comprehensive tracking
+  - `phase_history`: List of all state transitions with timestamps and triggers
+  - `advance(trigger="auto_advance")`: Progress to next phase with optional trigger recording
+  - `transition_to(phase, trigger="manual_transition")`: Explicit transition to specific phase with optional trigger
+  - `get_transition_summary()`: Human-readable timeline of state changes
+  - `get_phase_duration(phase)`: Calculate time spent in each phase
+  - `snapshot()`: Complete state snapshot for debugging
+- **Phase Enum**: Defines all possible agent states (8 phases)
+- **State Transitions**: Automatic and manual state progression with trigger tracking
+- **Context Tracking**: Requirements, tools, issues, progress, and transition history
+- **Error Handling**: Graceful handling of state transition failures with recovery
+
+## Advanced State Features
+
+### Phase Transition History
+Every state transition is recorded with:
+- **From Phase**: The starting phase
+- **To Phase**: The destination phase
+- **Timestamp**: When the transition occurred
+- **Trigger**: What caused the transition (e.g., `auto_advance`, `issues_detected`, `output_generated`)
+- **Transition Type**: Whether it was automatic or explicit
+
+### State Debugging Tools
+- **`state.snapshot()`**: Get complete state for inspection
+- **`state.print_snapshot()`**: Print formatted state summary
+- **`state.get_transition_summary()`**: Get human-readable transition timeline
+- **`state.get_phase_duration(phase)`**: Calculate time spent in specific phase
+
+### Logging Output
+The demo uses **summary logging** approach:
+- **Tool execution summaries** instead of individual tool call logs
+- **Final state summary** with key metrics
+- **Transition history timeline** at the end of each scenario
+- **Workflow completion status** and session duration
+- **Error messages** when issues occur
 
 ## Troubleshooting
 
 - **State Transition Errors**: Check that the LLM is returning valid JSON with proper phase suggestions
 - **Tool Execution Failures**: Verify that tools are properly registered and accessible
 - **Context Loss**: Ensure state is being properly maintained across interactions
-- **Phase Stuck**: Check data completeness thresholds and issue resolution logic
+- **Phase Stuck**: Check data completeness thresholds and issue resolution logic. Use `state.get_transition_summary()` to see transition history
+- **Debugging State Issues**: Use `state.snapshot()` or `state.print_snapshot()` to inspect current state
 - **Environment Issues**: Same as Lesson 1 - check your Azure OpenAI configuration
