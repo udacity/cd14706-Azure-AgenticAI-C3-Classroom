@@ -1,5 +1,3 @@
-# lesson-9-maintaining-long-term-agent-memory-in-python/exercises/solution/long_term_memory/core.py
-
 import logging
 import uuid
 from datetime import datetime
@@ -21,12 +19,6 @@ logger = logging.getLogger(__name__)
 
 
 class LongTermMemory:
-    """
-    High-level class for managing long-term memory:
-    - Adds, retrieves, updates memories
-    - Applies pruning/reordering
-    - Uses AI for optimization
-    """
 
     def __init__(self,
                  database_name: str = "agent_memory",
@@ -40,22 +32,17 @@ class LongTermMemory:
         self.importance_threshold = importance_threshold
         self.enable_ai_scoring = enable_ai_scoring
 
-        # Initialize Cosmos
         get_cosmos_client(database_name=self.database_name, container_name=self.container_name)
         self._container = get_container()
 
-        # Initialize AI kernel lazily
         self._kernel = get_openai_kernel(enable_ai_scoring)
 
-        # Pruning strategies map
         self.pruning_strategies = {
             "importance": lambda: prune_by_importance(self._container, self.importance_threshold),
             "age": lambda: prune_by_age(self._container, 30),
             "access_frequency": lambda: prune_by_access_frequency(self._container, 2),
             "hybrid": lambda: prune_hybrid(self._container, self.max_memories),
         }
-
-    # ---------------- Core operations ----------------
 
     async def add_memory(self,
                          session_id: str,
@@ -83,7 +70,7 @@ class LongTermMemory:
             embedding=embedding,
         )
         self._container.create_item(item.to_dict())
-        logger.info(f"✅ Added memory {memory_id} (importance={importance_score})")
+        logger.info(f"Added memory {memory_id} (importance={importance_score})")
 
         self._check_and_prune_if_needed()
         return memory_id
@@ -98,7 +85,7 @@ class LongTermMemory:
             self._container.upsert_item(mem.to_dict())
             return mem
         except Exception as e:
-            logger.error(f"❌ Failed to get memory {memory_id}: {e}")
+            logger.error(f"Failed to get memory {memory_id}: {e}")
             return None
 
     def get_memory_statistics(self, session_id: str = None) -> Dict[str, Any]:
@@ -151,7 +138,7 @@ class LongTermMemory:
                 "newest_memory": max(created_dates).isoformat() if created_dates else None,
             }
         except Exception as e:
-            logger.error(f"❌ Failed to calculate memory statistics: {e}")
+            logger.error(f"Failed to calculate memory statistics: {e}")
             return {}
 
     
@@ -162,14 +149,30 @@ class LongTermMemory:
                         tags: Optional[List[str]] = None,
                         min_importance: float = 0.0,
                         limit: int = 10) -> List[MemoryItem]:
-        """Search memories with filters."""
+        """
+        Search memories with filters using flexible keyword matching.
+
+        Uses keyword-based search: if query is "Lakers recent games", it will match
+        any memory containing "lakers" OR "recent" OR "games" (case-insensitive).
+        This provides semantic-like search without requiring vector embeddings.
+        """
         try:
             sql = ["SELECT * FROM c WHERE c.session_id = @sid"]
             params = [{"name": "@sid", "value": session_id}]
 
             if query:
-                sql.append("AND CONTAINS(LOWER(c.content), @q)")
-                params.append({"name": "@q", "value": query.lower()})
+                # Split query into keywords and search for ANY keyword match
+                # This allows "Lakers recent games" to match "User asked: Tell me about the Lakers recent games"
+                keywords = [kw for kw in query.lower().split() if len(kw) > 2]  # Filter short words
+                if keywords:
+                    keyword_conditions = []
+                    for i, keyword in enumerate(keywords):
+                        keyword_conditions.append(f"CONTAINS(LOWER(c.content), @kw{i})")
+                        params.append({"name": f"@kw{i}", "value": keyword})
+
+                    # Use OR to match any keyword
+                    sql.append(f"AND ({' OR '.join(keyword_conditions)})")
+
             if memory_type:
                 sql.append("AND c.memory_type = @mt")
                 params.append({"name": "@mt", "value": memory_type})
@@ -189,10 +192,12 @@ class LongTermMemory:
                 partition_key=session_id
             ))
             memories = [MemoryItem.from_dict(i) for i in items]
+
+            # Sort by relevance (importance + recency)
             memories.sort(key=lambda m: (m.importance_score, m.last_accessed), reverse=True)
             return memories[:limit]
         except Exception as e:
-            logger.error(f"❌ Search failed: {e}")
+            logger.error(f"Search failed: {e}")
             return []
 
     def update_memory_importance(self, memory_id: str, session_id: str, new_importance: float) -> bool:
@@ -205,8 +210,6 @@ class LongTermMemory:
         logger.info(f"Updated memory {memory_id} importance to {new_importance}")
         return True
 
-    # ---------------- Pruning & Reordering ----------------
-
     def _check_and_prune_if_needed(self):
         """Run pruning if memory count exceeds max_memories."""
         try:
@@ -217,7 +220,7 @@ class LongTermMemory:
             if count > self.max_memories:
                 self.prune_memories("hybrid")
         except Exception as e:
-            logger.error(f"❌ Check/prune failed: {e}")
+            logger.error(f"Check/prune failed: {e}")
 
     def prune_memories(self, strategy: str = "hybrid") -> int:
         """Run a specific pruning strategy."""
@@ -228,8 +231,6 @@ class LongTermMemory:
     def reorder_memories(self, session_id: str, strategy: str = "importance") -> int:
         """Reorder memories using a basic strategy."""
         return reorder_memories(self._container, session_id, strategy)
-
-    # ---------------- AI Optimization ----------------
 
     async def optimize_memory_performance(self, session_id: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -245,7 +246,6 @@ class LongTermMemory:
             self._container, self.max_memories, self.enable_ai_scoring
         )
 
-        # Reorder all active memories (or filter by session_id)
         query = "SELECT * FROM c WHERE c.is_archived = false"
         params = []
         if session_id:

@@ -1,19 +1,17 @@
-# lesson-9-maintaining-long-term-agent-memory-in-python/exercises/solution/long_term_memory/ai.py
-
 import os
 import logging
-from typing import Optional
+from typing import Optional, Any
 
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.functions import KernelArguments, FunctionResult
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Internal cached kernel and services
+
 _kernel: Optional[Kernel] = None
 _chat_service: Optional[AzureChatCompletion] = None
 _embedding_service: Optional[AzureTextEmbedding] = None
@@ -35,7 +33,7 @@ def get_openai_kernel(enable_ai_scoring: bool = True) -> Optional[Kernel]:
             embed_deploy = os.getenv("AZURE_OPENAI_EMBED_DEPLOYMENT")
 
             if not all([endpoint, api_version, key, chat_deploy, embed_deploy]):
-                logger.warning("⚠️ Missing Azure OpenAI env vars, disabling AI scoring")
+                logger.warning("Missing Azure OpenAI env vars, disabling AI scoring")
                 return None
 
             _kernel = Kernel()
@@ -56,10 +54,10 @@ def get_openai_kernel(enable_ai_scoring: bool = True) -> Optional[Kernel]:
             _kernel.add_service(_chat_service)
             _kernel.add_service(_embedding_service)
 
-            logger.info("✅ OpenAI kernel initialized with chat + embedding services")
+            logger.info("OpenAI kernel initialized with chat + embedding services")
 
         except Exception as e:
-            logger.error(f"❌ Failed to initialize OpenAI kernel: {e}")
+            logger.error(f"Failed to initialize OpenAI kernel: {e}")
             return None
 
     return _kernel

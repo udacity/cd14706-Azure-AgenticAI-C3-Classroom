@@ -20,12 +20,12 @@ async def prune_ai_optimized(container: Any,
     """
     try:
         if not enable_ai_scoring:
-            logger.info("⚠️ AI scoring disabled, skipping AI pruning")
+            logger.info("AI scoring disabled, skipping AI pruning")
             return 0
 
         kernel = get_openai_kernel(enable_ai_scoring=True)
         if not kernel:
-            logger.warning("⚠️ No OpenAI kernel available, skipping AI pruning")
+            logger.warning("No OpenAI kernel available, skipping AI pruning")
             return 0
 
         # Load memories
@@ -36,7 +36,7 @@ async def prune_ai_optimized(container: Any,
         if len(memories) <= max_memories:
             return 0
 
-        logger.info(f"🧠 AI pruning: analyzing {len(memories)} memories")
+        logger.info(f"AI pruning: analyzing {len(memories)} memories")
 
         # Ask AI to score them
         scores = await ai_score_memories_for_retention(memories)
@@ -55,10 +55,10 @@ async def prune_ai_optimized(container: Any,
             except Exception as e:
                 logger.warning(f"Failed to archive memory {mem.get('id')}: {e}")
 
-        logger.info(f"✅ AI pruning archived {count} memories")
+        logger.info(f"AI pruning archived {count} memories")
         return count
     except Exception as e:
-        logger.error(f"❌ AI pruning failed: {e}")
+        logger.error(f"AI pruning failed: {e}")
         return 0
 
 
@@ -110,7 +110,7 @@ async def ai_score_memories_for_retention(memories: List[Dict[str, Any]]) -> Lis
             return json.loads(text[start:end])
 
     except Exception as e:
-        logger.warning(f"⚠️ AI scoring fallback: {e}")
+        logger.warning(f"AI scoring fallback: {e}")
 
     # fallback heuristic
     return heuristic_memory_scoring(memories)
@@ -159,10 +159,10 @@ async def reorder_memories_intelligent(container: Any,
             container.upsert_item(mem)
             count += 1
 
-        logger.info(f"✅ Reordered {count} memories intelligently")
+        logger.info(f"Reordered {count} memories intelligently")
         return count
     except Exception as e:
-        logger.error(f"❌ Intelligent reordering failed: {e}")
+        logger.error(f"Intelligent reordering failed: {e}")
         return 0
 
 
@@ -207,7 +207,7 @@ async def calculate_intelligent_priorities(memories: List[Dict[str, Any]]) -> Li
             return json.loads(text[start:end])
 
     except Exception as e:
-        logger.warning(f"⚠️ AI priority fallback: {e}")
+        logger.warning(f"AI priority fallback: {e}")
 
     return heuristic_priority_scores(memories)
 
@@ -245,10 +245,10 @@ async def archive_old_memories(container: Any,
             except Exception as e:
                 logger.warning(f"Failed to archive memory {mem.get('id')}: {e}")
 
-        logger.info(f"📦 Archived {count} old/low-value memories")
+        logger.info(f"Archived {count} old/low-value memories")
         return count
     except Exception as e:
-        logger.error(f"❌ Archiving failed: {e}")
+        logger.error(f"Archiving failed: {e}")
         return 0
 
 
@@ -283,5 +283,5 @@ async def calculate_performance_improvements(container: Any,
             "optimization_score": min(1.0, efficiency * (1.0 - utilization)),
         }
     except Exception as e:
-        logger.error(f"❌ Performance metrics failed: {e}")
+        logger.error(f"Performance metrics failed: {e}")
         return {"error": str(e)}

@@ -22,10 +22,10 @@ def get_cosmos_client():
     if _client is None:
         try:
             _client = CosmosClient(os.environ["COSMOS_ENDPOINT"], os.environ["COSMOS_KEY"])
-            logger.info("✅ Using Cosmos DB connection key")
+            logger.info("Using Cosmos DB connection key")
             _container = _client.get_database_client(os.environ["COSMOS_DB"]).get_container_client(os.environ["COSMOS_CONTAINER"])
         except Exception as e:
-            logger.error(f"❌ Cosmos DB connection failed: {e}")
+            logger.error(f"Cosmos DB connection failed: {e}")
             _client = None
             _container = None
     return _client, _container
@@ -42,9 +42,9 @@ def create_embedding_kernel():
                 api_version=os.environ["AZURE_OPENAI_API_VERSION"]
             )
         )
-        logger.info("✅ Embedding kernel created successfully")
+        logger.info("Embedding kernel created successfully")
     except Exception as e:
-        logger.error(f"❌ Failed to create embedding kernel: {e}")
+        logger.error(f"Failed to create embedding kernel: {e}")
         return None
     return kernel
 
@@ -64,12 +64,11 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
                 embeddings.append(result.tolist())
             else:
                 embeddings.append(list(result))
-        logger.info(f"✅ Generated {len(embeddings)} embeddings")
+        logger.info(f"Generated {len(embeddings)} embeddings")
         return embeddings
     except Exception as e:
-        logger.error(f"❌ Embedding generation failed: {e}")
-        # Fallback to mock embeddings
-        return [[0.1] * 1536 for _ in texts]  # Mock embedding vector
+        logger.error(f"Embedding generation failed: {e}")
+        raise Exception(f"Failed to generate embeddings: {e}")
 
 async def retrieve_with_vector_search(query: str, k: int = 5) -> List[Dict[str, Any]]:
     """Retrieve documents using vector similarity search"""
@@ -95,11 +94,11 @@ async def retrieve_with_vector_search(query: str, k: int = 5) -> List[Dict[str, 
         ]
         
         results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
-        logger.info(f"✅ Vector search returned {len(results)} results")
+        logger.info(f"Vector search returned {len(results)} results")
         return results
         
     except Exception as e:
-        logger.error(f"❌ Vector search failed: {e}")
+        logger.error(f"Vector search failed: {e}")
         return []
 
 async def retrieve_with_text_search(query: str, k: int = 5) -> List[Dict[str, Any]]:
@@ -121,11 +120,11 @@ async def retrieve_with_text_search(query: str, k: int = 5) -> List[Dict[str, An
             params = [{"name": "@k", "value": k}]
             results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
         
-        logger.info(f"✅ Text search returned {len(results)} results")
+        logger.info(f"Text search returned {len(results)} results")
         return results
         
     except Exception as e:
-        logger.error(f"❌ Text search failed: {e}")
+        logger.error(f"Text search failed: {e}")
         return []
 
 async def retrieve_with_hybrid_search(query: str, k: int = 5) -> List[Dict[str, Any]]:
@@ -135,53 +134,23 @@ async def retrieve_with_hybrid_search(query: str, k: int = 5) -> List[Dict[str, 
         vector_results = await retrieve_with_vector_search(query, k)
         
         if vector_results:
-            logger.info("✅ Using vector search results")
+            logger.info("Using vector search results")
             return vector_results
         
         # Fallback to text search
-        logger.info("⚠️ Vector search failed, falling back to text search")
+        logger.info("Vector search failed, falling back to text search")
         text_results = await retrieve_with_text_search(query, k)
         
         if text_results:
-            logger.info("✅ Using text search results")
+            logger.info("Using text search results")
             return text_results
         
-        # Final fallback to mock data
-        logger.warning("⚠️ All search methods failed, using mock data")
-        return get_mock_documents(query, k)
+        logger.warning("All search methods failed - returning empty results")
+        return []
         
     except Exception as e:
-        logger.error(f"❌ Hybrid search failed: {e}")
-        return get_mock_documents(query, k)
-
-def get_mock_documents(query: str, k: int = 5) -> List[Dict[str, Any]]:
-    """Get mock documents as final fallback"""
-    mock_docs = [
-        {"id": "product-001", "text": "Wireless Bluetooth Headphones: Premium noise-canceling headphones with 30-hour battery life. Price: $199.99. Category: Electronics. In stock: 45 units.", "pk": "ecommerce"},
-        {"id": "product-002", "text": "Smart Fitness Watch: Water-resistant fitness tracker with heart rate monitoring and GPS. Price: $149.99. Category: Wearables. In stock: 23 units.", "pk": "ecommerce"},
-        {"id": "product-003", "text": "Organic Coffee Beans: Single-origin Ethiopian coffee beans, medium roast. Price: $24.99. Category: Food & Beverage. In stock: 67 units.", "pk": "ecommerce"},
-        {"id": "shipping-001", "text": "Free shipping on orders over $50. Standard shipping: 3-5 business days. Express shipping: 1-2 business days for $9.99.", "pk": "ecommerce"},
-        {"id": "return-001", "text": "30-day return policy for all items. Items must be in original condition with tags. Free return shipping provided.", "pk": "ecommerce"},
-        {"id": "warranty-001", "text": "1-year manufacturer warranty on electronics. Extended warranty available for purchase. Contact support for warranty claims.", "pk": "ecommerce"}
-    ]
-    
-    # Filter mock docs based on query keywords
-    query_lower = query.lower()
-    filtered_docs = []
-    
-    for doc in mock_docs:
-        text_lower = doc["text"].lower()
-        if any(keyword in text_lower for keyword in query_lower.split()):
-            filtered_docs.append(doc)
-    
-    # If no matches, return first k documents
-    if not filtered_docs:
-        filtered_docs = mock_docs[:k]
-    else:
-        filtered_docs = filtered_docs[:k]
-    
-    logger.info(f"✅ Using {len(filtered_docs)} mock documents")
-    return filtered_docs
+        logger.error(f"Hybrid search failed: {e}")
+        return []
 
 async def retrieve(query: str, k: int = 5, search_type: str = "hybrid") -> List[Dict[str, Any]]:
     """
@@ -195,7 +164,7 @@ async def retrieve(query: str, k: int = 5, search_type: str = "hybrid") -> List[
     Returns:
         List of retrieved documents with metadata
     """
-    logger.info(f"🔍 Retrieving documents for query: '{query}' (k={k}, type={search_type})")
+    logger.info(f"Retrieving documents for query: '{query}' (k={k}, type={search_type})")
     
     try:
         if search_type == "vector":
@@ -210,12 +179,12 @@ async def retrieve(query: str, k: int = 5, search_type: str = "hybrid") -> List[
             result["retrieval_rank"] = i + 1
             result["search_type"] = search_type
         
-        logger.info(f"✅ Retrieved {len(results)} documents")
+        logger.info(f"Retrieved {len(results)} documents")
         return results
         
     except Exception as e:
-        logger.error(f"❌ Document retrieval failed: {e}")
-        return get_mock_documents(query, k)
+        logger.error(f"Document retrieval failed: {e}")
+        return []
 
 async def assess_retrieval_quality(query: str, retrieved_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
@@ -281,7 +250,7 @@ async def assess_retrieval_quality(query: str, retrieved_docs: List[Dict[str, An
         }
         
     except Exception as e:
-        logger.error(f"❌ Quality assessment failed: {e}")
+        logger.error(f"Quality assessment failed: {e}")
         return {
             "confidence": 0.3,
             "reasoning": f"Assessment error: {e}",

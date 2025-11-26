@@ -1,5 +1,3 @@
-# lesson-9-maintaining-long-term-agent-memory-in-python/exercises/solution/long_term_memory/pruning.py
-
 import logging
 from datetime import datetime, timedelta
 from typing import Any
@@ -29,7 +27,7 @@ def prune_by_importance(container: Any, importance_threshold: float) -> int:
                 logger.warning(f"Failed to delete memory {item['id']}: {e}")
         return count
     except Exception as e:
-        logger.error(f"❌ Failed to prune by importance: {e}")
+        logger.error(f"Failed to prune by importance: {e}")
         return 0
 
 
@@ -56,7 +54,7 @@ def prune_by_age(container: Any, days: int = 30) -> int:
                 logger.warning(f"Failed to delete memory {item['id']}: {e}")
         return count
     except Exception as e:
-        logger.error(f"❌ Failed to prune by age: {e}")
+        logger.error(f"Failed to prune by age: {e}")
         return 0
 
 
@@ -82,7 +80,7 @@ def prune_by_access_frequency(container: Any, min_accesses: int = 2) -> int:
                 logger.warning(f"Failed to delete memory {item['id']}: {e}")
         return count
     except Exception as e:
-        logger.error(f"❌ Failed to prune by access frequency: {e}")
+        logger.error(f"Failed to prune by access frequency: {e}")
         return 0
 
 
@@ -105,7 +103,7 @@ def prune_hybrid(container: Any, max_memories: int) -> int:
         for mem in all_memories:
             try:
                 age_days = (now - datetime.fromisoformat(mem["created_at"])).days
-                age_factor = max(0, 1 - (age_days / 365))  # decay over 1 year
+                age_factor = max(0, 1 - (age_days / 365))
                 access_factor = min(1, mem["access_count"] / 10)
                 score = (
                     mem["importance_score"] * 0.5 +
@@ -116,7 +114,7 @@ def prune_hybrid(container: Any, max_memories: int) -> int:
             except Exception:
                 scored.append((mem, 0.0))
 
-        scored.sort(key=lambda x: x[1])  # lowest first
+        scored.sort(key=lambda x: x[1])
 
         to_delete = max(0, len(all_memories) - max_memories)
         count = 0
@@ -128,5 +126,5 @@ def prune_hybrid(container: Any, max_memories: int) -> int:
                 logger.warning(f"Failed to delete memory {mem['id']}: {e}")
         return count
     except Exception as e:
-        logger.error(f"❌ Failed to prune hybrid: {e}")
+        logger.error(f"Failed to prune hybrid: {e}")
         return 0

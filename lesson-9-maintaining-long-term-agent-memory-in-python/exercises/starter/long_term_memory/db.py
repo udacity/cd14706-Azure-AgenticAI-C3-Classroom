@@ -40,7 +40,7 @@ def get_cosmos_client(database_name: str = "agent_memory",
             partition_key=PartitionKey(path=partition_key),
         )
 
-        logger.info(f"✅ Connected to Cosmos DB: {database_name}/{container_name}")
+        logger.info(f"Connected to Cosmos DB: {database_name}/{container_name}")
 
     return _client
 

@@ -1,17 +1,13 @@
-# lesson-9-maintaining-long-term-agent-memory-in-python/exercises/solution/long_term_memory/db.py
-
 import os
 import logging
 from typing import Optional
 from azure.cosmos import CosmosClient, PartitionKey
 from dotenv import load_dotenv
 
-# Load .env variables
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Internal cached client/container
 _client: Optional[CosmosClient] = None
 _database = None
 _container = None
@@ -40,7 +36,7 @@ def get_cosmos_client(database_name: str = "agent_memory",
             partition_key=PartitionKey(path=partition_key),
         )
 
-        logger.info(f"✅ Connected to Cosmos DB: {database_name}/{container_name}")
+        logger.info(f"Connected to Cosmos DB: {database_name}/{container_name}")
 
     return _client
 

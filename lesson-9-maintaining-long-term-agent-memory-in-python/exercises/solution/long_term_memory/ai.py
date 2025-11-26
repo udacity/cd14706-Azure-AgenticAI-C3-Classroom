@@ -35,7 +35,7 @@ def get_openai_kernel(enable_ai_scoring: bool = True) -> Optional[Kernel]:
             embed_deploy = os.getenv("AZURE_OPENAI_EMBED_DEPLOYMENT")
 
             if not all([endpoint, api_version, key, chat_deploy, embed_deploy]):
-                logger.warning("⚠️ Missing Azure OpenAI env vars, disabling AI scoring")
+                logger.warning("Missing Azure OpenAI env vars, disabling AI scoring")
                 return None
 
             _kernel = Kernel()
@@ -56,10 +56,10 @@ def get_openai_kernel(enable_ai_scoring: bool = True) -> Optional[Kernel]:
             _kernel.add_service(_chat_service)
             _kernel.add_service(_embedding_service)
 
-            logger.info("✅ OpenAI kernel initialized with chat + embedding services")
+            logger.info("OpenAI kernel initialized with chat + embedding services")
 
         except Exception as e:
-            logger.error(f"❌ Failed to initialize OpenAI kernel: {e}")
+            logger.error(f"Failed to initialize OpenAI kernel: {e}")
             return None
 
     return _kernel

@@ -1,5 +1,3 @@
-# lesson-9-maintaining-long-term-agent-memory-in-python/exercises/solution/long_term_memory/models.py
-
 from dataclasses import dataclass, asdict, fields
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -22,7 +20,6 @@ class MemoryItem:
     metadata: Dict[str, Any]
     embedding: Optional[List[float]] = None
 
-    # Optimization fields
     priority_score: float = 0.0
     relevance_score: float = 0.0
     memory_size: int = 0

@@ -68,8 +68,7 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
         return embeddings
     except Exception as e:
         logger.error(f"❌ Embedding generation failed: {e}")
-        # Fallback to mock embeddings
-        return [[0.1] * 1536 for _ in texts]  # Mock embedding vector
+        raise Exception(f"Failed to generate embeddings: {e}")
 
 async def retrieve_with_vector_search(query: str, k: int = 5) -> List[Dict[str, Any]]:
     """Retrieve documents using vector similarity search"""
@@ -147,41 +146,12 @@ async def retrieve_with_hybrid_search(query: str, k: int = 5) -> List[Dict[str, 
             return text_results
         
         # Final fallback to mock data
-        logger.warning("⚠️ All search methods failed, using mock data")
-        return get_mock_documents(query, k)
+        logger.warning("All search methods failed - returning empty results")
+        return []
         
     except Exception as e:
-        logger.error(f"❌ Hybrid search failed: {e}")
-        return get_mock_documents(query, k)
-
-def get_mock_documents(query: str, k: int = 5) -> List[Dict[str, Any]]:
-    """Get mock documents as final fallback"""
-    mock_docs = [
-        {"id": "product-001", "text": "Wireless Bluetooth Headphones: Premium noise-canceling headphones with 30-hour battery life. Price: $199.99. Category: Electronics. In stock: 45 units.", "pk": "ecommerce"},
-        {"id": "product-002", "text": "Smart Fitness Watch: Water-resistant fitness tracker with heart rate monitoring and GPS. Price: $149.99. Category: Wearables. In stock: 23 units.", "pk": "ecommerce"},
-        {"id": "product-003", "text": "Organic Coffee Beans: Single-origin Ethiopian coffee beans, medium roast. Price: $24.99. Category: Food & Beverage. In stock: 67 units.", "pk": "ecommerce"},
-        {"id": "shipping-001", "text": "Free shipping on orders over $50. Standard shipping: 3-5 business days. Express shipping: 1-2 business days for $9.99.", "pk": "ecommerce"},
-        {"id": "return-001", "text": "30-day return policy for all items. Items must be in original condition with tags. Free return shipping provided.", "pk": "ecommerce"},
-        {"id": "warranty-001", "text": "1-year manufacturer warranty on electronics. Extended warranty available for purchase. Contact support for warranty claims.", "pk": "ecommerce"}
-    ]
-    
-    # Filter mock docs based on query keywords
-    query_lower = query.lower()
-    filtered_docs = []
-    
-    for doc in mock_docs:
-        text_lower = doc["text"].lower()
-        if any(keyword in text_lower for keyword in query_lower.split()):
-            filtered_docs.append(doc)
-    
-    # If no matches, return first k documents
-    if not filtered_docs:
-        filtered_docs = mock_docs[:k]
-    else:
-        filtered_docs = filtered_docs[:k]
-    
-    logger.info(f"✅ Using {len(filtered_docs)} mock documents")
-    return filtered_docs
+        logger.error(f"Hybrid search failed: {e}")
+        return []
 
 async def retrieve(query: str, k: int = 5, search_type: str = "hybrid") -> List[Dict[str, Any]]:
     """
@@ -215,7 +185,7 @@ async def retrieve(query: str, k: int = 5, search_type: str = "hybrid") -> List[
         
     except Exception as e:
         logger.error(f"❌ Document retrieval failed: {e}")
-        return get_mock_documents(query, k)
+        return []
 
 async def assess_retrieval_quality(query: str, retrieved_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
     """

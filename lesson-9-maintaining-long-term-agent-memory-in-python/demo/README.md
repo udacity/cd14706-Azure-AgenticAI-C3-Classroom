@@ -74,9 +74,9 @@ class MemoryItem:
 ```
 
 ### AI-Powered Memory Management
-- **OpenAI Integration**: Uses Semantic Kernel for intelligent memory scoring
+- **Semantic Kernel Integration**: Uses Semantic Kernel's AzureChatCompletion service for intelligent memory scoring
 - **Intelligent Pruning**: AI determines which memories to retain or archive
-- **Smart Reordering**: AI calculates optimal memory priorities
+- **Smart Reordering**: AI calculates optimal memory priorities using Semantic Kernel
 - **Context-Aware Scoring**: Considers memory relevance and importance
 
 ### Advanced Pruning Strategies
@@ -90,6 +90,29 @@ class MemoryItem:
 - **Performance Metrics**: Tracks memory efficiency and storage utilization
 - **Automated Management**: Configurable auto-pruning and reordering
 - **Real-time Monitoring**: Continuous performance assessment
+
+## Expected Output
+
+The demo will run through two main sections:
+
+### 1. Long-Term Memory Operations Demo
+- **Memory Seeding**: Creates sample memories across multiple sessions (travel, work, personal)
+- **Memory Search**: Searches for memories within specific sessions (e.g., "japan" in travel session)
+- **Importance Updates**: Updates memory importance scores dynamically
+- **Memory Statistics**: Displays global and session-level memory statistics
+- **Pruning Operations**: Demonstrates importance-based and hybrid pruning strategies
+- **Memory Reordering**: Reorders memories by importance within a session
+- **Performance Optimization**: Runs comprehensive AI-powered optimization
+
+### 2. Assistant Agent with Memory - Conversation Demo
+- **Agent Initialization**: Creates an AssistantAgent with long-term memory integration
+- **Conversation Queries**: Processes multiple queries that leverage memory:
+  - "Tell me about my trip to Japan"
+  - "What did I book for the trip?"
+  - "When is my team sync scheduled?"
+- **Memory Retrieval**: Shows how the agent retrieves relevant memories for each query
+- **Context-Aware Responses**: Demonstrates responses that reference past conversations
+- **Memory Storage**: Stores new conversation memories after each interaction
 
 ## Usage Examples
 
@@ -108,8 +131,7 @@ await ltm.add_memory(
     content="User planning trip to Japan",
     memory_type="conversation",
     importance_score=0.8,
-    tags=["travel", "japan"],
-    context="User is planning a major trip"
+    tags=["travel", "japan"]
 )
 ```
 
@@ -226,7 +248,7 @@ pip install -r requirements.txt
 
 ### Running the Demo
 ```bash
-python long_term_memory.py
+python main.py
 ```
 
 ## Learning Outcomes

@@ -162,14 +162,29 @@ class LongTermMemory:
                         tags: Optional[List[str]] = None,
                         min_importance: float = 0.0,
                         limit: int = 10) -> List[MemoryItem]:
-        """Search memories with filters."""
+        """
+        Search memories with filters using flexible keyword matching.
+
+        Uses keyword-based search: if query is "Lakers recent games", it will match
+        any memory containing "lakers" OR "recent" OR "games" (case-insensitive).
+        This provides semantic-like search without requiring vector embeddings.
+        """
         try:
             sql = ["SELECT * FROM c WHERE c.session_id = @sid"]
             params = [{"name": "@sid", "value": session_id}]
 
             if query:
-                sql.append("AND CONTAINS(LOWER(c.content), @q)")
-                params.append({"name": "@q", "value": query.lower()})
+                # Split query into keywords and search for ANY keyword match
+                # This allows "Lakers recent games" to match "User asked: Tell me about the Lakers recent games"
+                keywords = [kw for kw in query.lower().split() if len(kw) > 2]  # Filter short words
+                if keywords:
+                    keyword_conditions = []
+                    for i, keyword in enumerate(keywords):
+                        keyword_conditions.append(f"CONTAINS(LOWER(c.content), @kw{i})")
+                        params.append({"name": f"@kw{i}", "value": keyword})
+
+                    # Use OR to match any keyword
+                    sql.append(f"AND ({' OR '.join(keyword_conditions)})")
             if memory_type:
                 sql.append("AND c.memory_type = @mt")
                 params.append({"name": "@mt", "value": memory_type})

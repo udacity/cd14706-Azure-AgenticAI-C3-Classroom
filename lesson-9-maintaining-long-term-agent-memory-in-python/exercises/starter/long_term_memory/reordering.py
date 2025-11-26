@@ -49,11 +49,11 @@ def reorder_memories(container: Any, session_id: str, strategy: str = "importanc
             container.upsert_item(mem.to_dict())
             count += 1
 
-        logger.info(f"✅ Reordered {count} memories for session {session_id} using {strategy}")
+        logger.info(f"Reordered {count} memories for session {session_id} using {strategy}")
         return count
 
     except Exception as e:
-        logger.error(f"❌ Failed to reorder memories for session {session_id}: {e}")
+        logger.error(f"Failed to reorder memories for session {session_id}: {e}")
         return 0
 
 

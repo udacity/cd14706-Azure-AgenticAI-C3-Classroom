@@ -9,7 +9,7 @@ load_dotenv()
 
 # Initialize Cosmos client for ecommerce data
 client = CosmosClient(os.environ["COSMOS_ENDPOINT"], os.environ["COSMOS_KEY"])
-print("✅ Using Cosmos DB connection key for ecommerce data ingestion")
+print("Using Cosmos DB connection key for ecommerce data ingestion")
 db = client.create_database_if_not_exists(id=os.environ["COSMOS_DB"])
 container = db.create_container_if_not_exists(
     id=os.environ["COSMOS_CONTAINER"],
@@ -55,9 +55,9 @@ def upsert_snippet(doc_id, text, pk="ecommerce"):
             "text": text,
             "embedding": vec
         })
-        print(f"✅ {doc_id} upserted with Semantic Kernel embeddings.")
+        print(f"{doc_id} upserted with Semantic Kernel embeddings.")
     except Exception as e:
-        print(f"❌ Failed to upsert {doc_id}: {e}")
+        print(f"Failed to upsert {doc_id}: {e}")
 
 if __name__ == "__main__":
     # Ecommerce product information snippets
@@ -69,4 +69,4 @@ if __name__ == "__main__":
     upsert_snippet("shipping-001", "Free shipping on orders over $50. Standard shipping: 3-5 business days. Express shipping: 1-2 business days for $9.99.")
     upsert_snippet("return-001", "30-day return policy for all items. Items must be in original condition with tags. Free return shipping provided.")
     upsert_snippet("warranty-001", "1-year manufacturer warranty on electronics. Extended warranty available for purchase. Contact support for warranty claims.")
-    print("✅ All ecommerce snippets upserted with Semantic Kernel embeddings.")
+    print("All ecommerce snippets upserted with Semantic Kernel embeddings.")

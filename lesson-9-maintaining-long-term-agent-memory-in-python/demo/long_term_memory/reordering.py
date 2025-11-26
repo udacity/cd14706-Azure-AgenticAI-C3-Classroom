@@ -1,5 +1,3 @@
-# lesson-9-maintaining-long-term-agent-memory-in-python/exercises/solution/long_term_memory/reordering.py
-
 import logging
 from datetime import datetime
 from typing import List, Any
@@ -49,11 +47,11 @@ def reorder_memories(container: Any, session_id: str, strategy: str = "importanc
             container.upsert_item(mem.to_dict())
             count += 1
 
-        logger.info(f"✅ Reordered {count} memories for session {session_id} using {strategy}")
+        logger.info(f"Reordered {count} memories for session {session_id} using {strategy}")
         return count
 
     except Exception as e:
-        logger.error(f"❌ Failed to reorder memories for session {session_id}: {e}")
+        logger.error(f"Failed to reorder memories for session {session_id}: {e}")
         return 0
 
 
@@ -83,7 +81,7 @@ def heuristic_priority_scores(memories: List[dict]) -> List[float]:
         try:
             created_at = datetime.fromisoformat(m.get("created_at", ""))
             days_old = (now - created_at).days
-            recency = max(0, 1.0 - (days_old / 90))  # decay over 90 days
+            recency = max(0, 1.0 - (days_old / 90))
             score += recency * 0.2
         except Exception:
             score += 0.1
