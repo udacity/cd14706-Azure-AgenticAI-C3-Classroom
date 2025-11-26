@@ -17,9 +17,8 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("semantic_kernel.connectors.ai.open_ai.services.open_ai_handler").setLevel(logging.WARNING)
 logging.getLogger("asyncio").setLevel(logging.WARNING)
 
-# Initialize Cosmos client for sports data
 client = CosmosClient(os.environ["COSMOS_ENDPOINT"], os.environ["COSMOS_KEY"])
-print("✅ Using Cosmos DB connection key for sports data ingestion")
+print("Using Cosmos DB connection key for ecommerce data ingestion")
 db = client.create_database_if_not_exists(id=os.environ["COSMOS_DB"])
 container = db.create_container_if_not_exists(
     id=os.environ["COSMOS_CONTAINER"],
@@ -47,15 +46,35 @@ async def embed_texts(texts):
     embeddings = []
     for text in texts:
         result = await embedding_service.generate_embeddings(text)
-        # Convert ndarray to list for JSON serialization
+        # Convert to list of floats - handle different return types
         if hasattr(result, 'tolist'):
-            embeddings.append(result.tolist())
+            embedding_list = result.tolist()
+        elif isinstance(result, list):
+            embedding_list = result
         else:
-            embeddings.append(list(result))
+            embedding_list = list(result)
+        
+        # Flatten nested lists if needed and ensure all values are floats
+        # Handle case where embedding_list might be nested (list of lists)
+        if embedding_list and isinstance(embedding_list[0], (list, tuple)):
+            # If first element is a list/tuple, flatten it - use the first nested list
+            embedding_list = embedding_list[0]
+        
+        # Ensure all values are floats - recursively handle any remaining nested structures
+        def flatten_to_floats(value):
+            if isinstance(value, (list, tuple)):
+                # If it's a list, take the first element or flatten further
+                if value and isinstance(value[0], (list, tuple)):
+                    return flatten_to_floats(value[0])
+                return float(value[0]) if value else 0.0
+            return float(value)
+        
+        embedding_list = [flatten_to_floats(x) for x in embedding_list]
+        embeddings.append(embedding_list)
     return embeddings
 
-async def upsert_snippet(doc_id, text, pk="sports"):
-    """Upsert a sports document with its embedding into Cosmos DB"""
+async def upsert_snippet(doc_id, text, pk="ecommerce"):
+    """Upsert a document with its embedding into Cosmos DB"""
     try:
         embeddings = await embed_texts([text])
         vec = embeddings[0]
@@ -65,35 +84,27 @@ async def upsert_snippet(doc_id, text, pk="sports"):
             "text": text,
             "embedding": vec
         })
-        print(f"✅ {doc_id} upserted with Semantic Kernel embeddings.")
+        print(f"{doc_id} upserted with Semantic Kernel embeddings.")
     except Exception as e:
-        print(f"❌ Failed to upsert {doc_id}: {e}")
+        print(f"Failed to upsert {doc_id}: {e}")
 
-async def main():
-    """Main function to upsert sports data"""
-    # Sports data snippets for ingestion
-    await upsert_snippet("nfl-qb-001", "Patrick Mahomes: Kansas City Chiefs quarterback. 2023 stats: 4,183 passing yards, 27 touchdowns, 14 interceptions. Completion rate: 66.4%. Led team to Super Bowl victory.")
-    await upsert_snippet("nfl-qb-002", "Josh Allen: Buffalo Bills quarterback. 2023 stats: 4,306 passing yards, 29 touchdowns, 18 interceptions. Completion rate: 66.5%. Known for dual-threat ability with 524 rushing yards.")
-    await upsert_snippet("nfl-qb-003", "Lamar Jackson: Baltimore Ravens quarterback. 2023 stats: 3,678 passing yards, 24 touchdowns, 7 interceptions. Completion rate: 67.2%. Rushing: 821 yards, 5 touchdowns. MVP candidate.")
-    await upsert_snippet("nba-lakers-001", "Los Angeles Lakers: 2023-24 season record 47-35. Key players: LeBron James (25.7 PPG, 8.3 RPG), Anthony Davis (24.1 PPG, 12.6 RPG). Strengths: Defense, veteran leadership, playoff experience.")
-    await upsert_snippet("nba-lakers-002", "Lakers recent performance: Won 8 of last 10 games. Improved three-point shooting (37.2%). Strong defensive rating (110.3). Key wins against Celtics, Warriors, and Nuggets.")
-    await upsert_snippet("nba-celtics-001", "Boston Celtics: 2023-24 season record 64-18. Key players: Jayson Tatum (26.9 PPG, 8.1 RPG), Jaylen Brown (23.0 PPG, 5.5 RPG). Strengths: Depth, three-point shooting, defense.")
-    await upsert_snippet("premier-league-001", "Premier League 2023-24 standings: Manchester City (89 points), Arsenal (84 points), Liverpool (82 points). Top scorers: Erling Haaland (27 goals), Mohamed Salah (18 goals).")
-    await upsert_snippet("premier-league-002", "Manchester City: Defending champions. Key players: Erling Haaland, Kevin De Bruyne, Rodri. Strengths: Possession play, attacking depth, Pep Guardiola tactics.")
-    await upsert_snippet("tennis-001", "Novak Djokovic: Current world #1. 2023 Grand Slam results: Australian Open winner, French Open winner, Wimbledon finalist, US Open winner. Total career Grand Slams: 24.")
-    await upsert_snippet("tennis-002", "Carlos Alcaraz: Spanish tennis player, world #2. 2023 highlights: Wimbledon winner, US Open finalist. Known for aggressive baseline play and powerful forehand. Age: 21.")
-    await upsert_snippet("tennis-003", "Iga Swiatek: Polish tennis player, world #1 in women's tennis. 2023 highlights: French Open winner, WTA Finals winner. Known for powerful groundstrokes and mental toughness.")
-    await upsert_snippet("nba-playoffs-001", "NBA Playoffs 2024: Boston Celtics (1st seed, 64-18 record), Denver Nuggets (2nd seed, 57-25 record). Key storylines: Celtics' depth, Nuggets' championship defense, young teams rising.")
-    await upsert_snippet("nba-playoffs-002", "Denver Nuggets: Defending NBA champions. Key players: Nikola Jokic (26.4 PPG, 12.4 RPG, 9.0 APG), Jamal Murray (21.2 PPG). Strengths: Jokic's playmaking, team chemistry, playoff experience.")
-    await upsert_snippet("nfl-teams-001", "NFL 2023 season: Kansas City Chiefs (11-6), Buffalo Bills (11-6), Baltimore Ravens (13-4). Key storylines: Chiefs' dynasty, Bills' playoff struggles, Ravens' MVP season.")
-    await upsert_snippet("nfl-teams-002", "Kansas City Chiefs: Defending Super Bowl champions. Key players: Patrick Mahomes, Travis Kelce, Chris Jones. Strengths: Mahomes' improvisation, Andy Reid's coaching, playoff experience.")
-    await upsert_snippet("soccer-world-001", "World Cup 2026: Hosted by USA, Canada, and Mexico. Qualification: 48 teams. Key storylines: Messi's final World Cup, young talent emergence, host nation expectations.")
-    await upsert_snippet("soccer-world-002", "Lionel Messi: Argentine forward, 8 Ballon d'Or winner. 2023 highlights: World Cup winner, Inter Miami transfer. Known for dribbling, passing, and finishing ability.")
-    await upsert_snippet("basketball-stats-001", "NBA 2023-24 season statistics: League average points per game: 115.6. Three-point percentage: 36.1%. Free throw percentage: 78.9%. Pace: 101.2 possessions per game.")
-    await upsert_snippet("basketball-stats-002", "NBA scoring leaders 2023-24: Luka Doncic (33.9 PPG), Joel Embiid (34.7 PPG), Giannis Antetokounmpo (30.4 PPG). Rebounding: Domantas Sabonis (13.7 RPG), Nikola Jokic (12.4 RPG).")
-    await upsert_snippet("football-stats-001", "NFL 2023 season statistics: League average passing yards per game: 225.8. Rushing yards per game: 118.9. Total touchdowns: 1,371. Field goal percentage: 85.2%.")
-    await upsert_snippet("football-stats-002", "NFL passing leaders 2023: Tua Tagovailoa (4,624 yards), Dak Prescott (4,516 yards), Jared Goff (4,575 yards). Rushing: Josh Jacobs (1,653 yards), Derrick Henry (1,167 yards).")
-    print("✅ All sports snippets upserted with Semantic Kernel embeddings.")
+if __name__ == "__main__":
+    import asyncio
+    test_products = [
+        ("product-001", "Wireless Bluetooth Headphones: Premium noise-canceling headphones with 30-hour battery life. Price: $199.99. Category: Electronics. In stock: 45 units."),
+        ("product-002", "Smart Fitness Watch: Water-resistant fitness tracker with heart rate monitoring and GPS. Price: $149.99. Category: Wearables. In stock: 23 units."),
+        ("product-003", "Organic Coffee Beans: Single-origin Ethiopian coffee beans, medium roast. Price: $24.99. Category: Food & Beverage. In stock: 67 units."),
+        ("product-004", "Laptop Stand: Adjustable aluminum laptop stand for ergonomic workspace. Price: $39.99. Category: Office Supplies. In stock: 12 units."),
+        ("product-005", "Yoga Mat: Non-slip premium yoga mat with carrying strap. Price: $49.99. Category: Sports & Fitness. In stock: 34 units."),
+        ("shipping-001", "Free shipping on orders over $50. Standard shipping: 3-5 business days. Express shipping: 1-2 business days for $9.99."),
+        ("return-001", "30-day return policy for all items. Items must be in original condition with tags. Free return shipping provided."),
+        ("warranty-001", "1-year manufacturer warranty on electronics. Extended warranty available for purchase. Contact support for warranty claims.")
+    ]
+    async def main():
+        for product_id, product_text in test_products:
+            await upsert_snippet(product_id, product_text, pk="ecommerce")
+        print("All ecommerce snippets upserted with Semantic Kernel embeddings.")
+    asyncio.run(main())
 
 if __name__ == "__main__":
     import asyncio

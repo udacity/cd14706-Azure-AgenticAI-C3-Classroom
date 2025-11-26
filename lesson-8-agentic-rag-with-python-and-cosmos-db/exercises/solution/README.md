@@ -2,6 +2,24 @@
 
 [VIDEO_PLACEHOLDER: Agentic RAG with Cosmos DB]
 
+## **Data Setup**
+
+This exercise uses e-commerce data. You have two options:
+
+**Option 1: Shared Container (Simpler)**
+- Use your existing `sports_docs` container from previous lessons
+- Ecommerce data will be stored with `pk="ecommerce"` for organization
+- No `.env` changes needed
+
+**Option 2: Separate Container (Recommended for Isolation)**
+- Create a dedicated container for ecommerce data
+- Update `.env`: `COSMOS_CONTAINER=ecommerce-container`
+- Better isolation and cleaner testing
+
+Most students can use **Option 1** (shared container).
+
+---
+
 ### **Solution Walkthrough**
 
 We implement an autonomous RAG agent that evaluates retrieval quality and refines the query before answering. The loop attempts retrieval up to a threshold.
@@ -16,31 +34,53 @@ for attempt in range(self.max_retrieval_attempts):
     query = await self._refine_query(query, retrieved_docs, qa["issues"])
 ```
 
-Quality is judged via an LLM function that returns a JSON payload we parse and trust only if it’s valid JSON; otherwise we fall back safely.
+Quality is judged via an LLM call that returns a JSON payload we parse and trust only if it's valid JSON; otherwise we fall back safely.
 
 ```python
-assessment_function = self.kernel.add_function(
-    function_name="assess_retrieval_quality",
-    plugin_name="rag_assessment",
-    prompt=assessment_prompt,
+# Use ChatCompletionService directly
+chat_service = self.kernel.get_service(type=ChatCompletionClientBase)
+chat_history = ChatHistory()
+chat_history.add_user_message(assessment_prompt)
+
+settings = OpenAIChatPromptExecutionSettings(temperature=0.1, max_tokens=500)
+response = await chat_service.get_chat_message_contents(
+    chat_history=chat_history,
+    settings=settings,
+    kernel=self.kernel
 )
-assessment_text = str(await self.kernel.invoke(assessment_function))
-json_str = assessment_text[assessment_text.find('{'):assessment_text.rfind('}')+1]
-assessment = json.loads(json_str) if json_str else {"confidence": 0.5, ...}
+assessment_text = response[0].content.strip()
+
+# Parse JSON response
+json_start = assessment_text.find('{')
+json_end = assessment_text.rfind('}') + 1
+if json_start != -1 and json_end > json_start:
+    json_str = assessment_text[json_start:json_end]
+    assessment = json.loads(json_str)
+else:
+    assessment = {"confidence": 0.5, "reasoning": "Unable to assess", "issues": []}
 ```
 
 We then synthesize an answer from the retrieved snippets, citing context where relevant.
 
 ```python
-context = "\n\n".join(
-    f"Document {i+1} (ID: {d.get('id','unknown')}):\n{d.get('text','')}" for i, d in enumerate(retrieved_docs)
+# Prepare context from retrieved documents
+context = "\n\n".join([
+    f"Document {i+1} (ID: {doc.get('id', 'unknown')}):\n{doc.get('text', '')}"
+    for i, doc in enumerate(retrieved_docs)
+])
+
+# Generate answer using ChatCompletionService
+chat_service = self.kernel.get_service(type=ChatCompletionClientBase)
+chat_history = ChatHistory()
+chat_history.add_user_message(answer_prompt)
+
+settings = OpenAIChatPromptExecutionSettings(temperature=0.7, max_tokens=1000)
+response = await chat_service.get_chat_message_contents(
+    chat_history=chat_history,
+    settings=settings,
+    kernel=self.kernel
 )
-answer_function = self.kernel.add_function(
-    function_name="generate_answer",
-    plugin_name="rag_answer",
-    prompt=answer_prompt,
-)
-answer = str(await self.kernel.invoke(answer_function)).strip()
+answer = response[0].content.strip()
 ```
 
 ```

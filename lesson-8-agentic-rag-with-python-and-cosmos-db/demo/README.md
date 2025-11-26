@@ -30,9 +30,9 @@ The Sports Analyst RAG agent demonstrates autonomous operation by:
 ### 🧠 Under the Hood
 
 - Uses `azure-cosmos` SDK for database operations
-- Generates embeddings with `AzureTextEmbedding` service
+- Generates embeddings with Semantic Kernel's `AzureTextEmbedding` service
 - Implements hybrid search (vector + text) with intelligent fallback
-- Uses Semantic Kernel for LLM-based quality assessment and query refinement
+- Uses Semantic Kernel's AzureChatCompletion for LLM-based quality assessment and query refinement
 - Autonomous re-checking based on confidence thresholds
 - Specialized for sports analysis with domain-specific prompts
 
@@ -188,9 +188,9 @@ The demo tests various sports analysis queries:
 
 ## 🔧 Technical Architecture
 
-- **Semantic Kernel**: LLM orchestration and function calling
+- **Semantic Kernel**: LLM orchestration, function calling, and service management (AzureChatCompletion and AzureTextEmbedding)
 - **Azure Cosmos DB**: Vector database with hybrid search capabilities
-- **Azure OpenAI**: Embedding generation and text completion
+- **Azure OpenAI**: Embedding generation via Semantic Kernel's AzureTextEmbedding and text completion via AzureChatCompletion
 - **Pydantic**: Data validation and structured outputs
 - **Async/Await**: Asynchronous processing for better performance
 

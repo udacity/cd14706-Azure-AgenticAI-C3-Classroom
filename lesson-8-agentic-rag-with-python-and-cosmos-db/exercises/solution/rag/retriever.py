@@ -12,9 +12,21 @@ load_dotenv()
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# Reduce verbosity of Azure SDK logging
+logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
+logging.getLogger("azure.cosmos").setLevel(logging.WARNING)
+logging.getLogger("azure.identity").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("semantic_kernel.connectors.ai.open_ai.services.open_ai_handler").setLevel(logging.WARNING)
+logging.getLogger("asyncio").setLevel(logging.WARNING)
+
 # Lazy initialization of Cosmos client
 _client = None
 _container = None
+
+# Lazy initialization of embedding kernel (reuse to avoid asyncio cleanup issues)
+_embedding_kernel = None
 
 def get_cosmos_client():
     """Get or create Cosmos DB client and container"""
@@ -30,36 +42,30 @@ def get_cosmos_client():
             _container = None
     return _client, _container
 
-def create_embedding_kernel():
-    """Create Semantic Kernel instance for embeddings"""
-    kernel = Kernel()
-    try:
-        kernel.add_service(
-            AzureTextEmbedding(
-                deployment_name=os.environ["AZURE_OPENAI_EMBED_DEPLOYMENT"],
-                endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-                api_key=os.environ["AZURE_OPENAI_KEY"],
-                api_version=os.environ["AZURE_OPENAI_API_VERSION"]
+def get_embedding_kernel():
+    """Get or create Semantic Kernel instance for embeddings (reused to avoid cleanup issues)"""
+    global _embedding_kernel
+    if _embedding_kernel is None:
+        try:
+            _embedding_kernel = Kernel()
+            _embedding_kernel.add_service(
+                AzureTextEmbedding(
+                    deployment_name=os.environ["AZURE_OPENAI_EMBED_DEPLOYMENT"],
+                    endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+                    api_key=os.environ["AZURE_OPENAI_KEY"],
+                    api_version=os.environ["AZURE_OPENAI_API_VERSION"]
+                )
             )
-        )
-        logger.info("✅ Embedding kernel created successfully")
-    except Exception as e:
-        logger.error(f"❌ Failed to create embedding kernel: {e}")
-        return None
-    return kernel
+            logger.info("✅ Embedding kernel created successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to create embedding kernel: {e}")
+            return None
+    return _embedding_kernel
 
 async def embed_texts(texts: List[str]) -> List[List[float]]:
-    """
-    Generate embeddings using Semantic Kernel.
-
-    Hint: To use these embeddings in Cosmos DB vector search, you can query like:
-
-        SELECT TOP 5 c.id, c.content
-        FROM c
-        ORDER BY VectorDistance(c.embedding, @embedding)
-    """
+    """Generate embeddings using Semantic Kernel"""
     try:
-        kernel = create_embedding_kernel()
+        kernel = get_embedding_kernel()
         if kernel is None:
             raise Exception("Failed to create embedding kernel")
         
@@ -67,163 +73,192 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
         embeddings = []
         for text in texts:
             result = await embedding_service.generate_embeddings(text)
-            # Convert ndarray to list for JSON serialization
+            # Convert to list of floats - handle different return types
             if hasattr(result, 'tolist'):
-                embeddings.append(result.tolist())
+                embedding_list = result.tolist()
+            elif isinstance(result, list):
+                embedding_list = result
             else:
-                embeddings.append(list(result))
-        logger.info(f"✅ Generated {len(embeddings)} embeddings")
+                embedding_list = list(result)
+            
+            # Flatten nested lists if needed and ensure all values are floats
+            # Handle case where embedding_list might be nested (list of lists)
+            if embedding_list and isinstance(embedding_list[0], (list, tuple)):
+                # If first element is a list/tuple, flatten it - use the first nested list
+                embedding_list = embedding_list[0]
+            
+            # Ensure all values are floats - recursively handle any remaining nested structures
+            def flatten_to_floats(value):
+                if isinstance(value, (list, tuple)):
+                    # If it's a list, take the first element or flatten further
+                    if value and isinstance(value[0], (list, tuple)):
+                        return flatten_to_floats(value[0])
+                    return float(value[0]) if value else 0.0
+                return float(value)
+            
+            embedding_list = [flatten_to_floats(x) for x in embedding_list]
+            embeddings.append(embedding_list)
+        logger.info(f"✅ Generated {len(embeddings)} embeddings (dimension: {len(embeddings[0]) if embeddings else 0})")
         return embeddings
     except Exception as e:
         logger.error(f"❌ Embedding generation failed: {e}")
-        # Fallback to mock embeddings
-        return [[0.1] * 1536 for _ in texts]  # Mock embedding vector
+        raise Exception(f"Failed to generate embeddings: {e}")
 
-async def retrieve_with_vector_search(query: str, k: int = 5) -> List[Dict[str, Any]]:
+async def retrieve_with_vector_search(query: str, k: int = 5, partition_key: str = None) -> List[Dict[str, Any]]:
     """Retrieve documents using vector similarity search"""
     try:
         client, container = get_cosmos_client()
         if client is None or container is None:
             raise Exception("Cosmos DB not available")
-        
+
         # Generate embedding for the query
         query_embedding = await embed_texts([query])
         query_vector = query_embedding[0]
-        
-        # Use vector similarity search
-        sql = """
-        SELECT TOP @k c.id, c.text, c.pk, 
-               VectorDistance(c.embedding, @queryVector, false) as distance
-        FROM c 
-        ORDER BY VectorDistance(c.embedding, @queryVector, false)
-        """
-        params = [
-            {"name": "@k", "value": k},
-            {"name": "@queryVector", "value": query_vector}
-        ]
-        
+
+        # Validate embedding format
+        if not query_vector or not isinstance(query_vector, list):
+            raise ValueError(f"Invalid embedding format: {type(query_vector)}")
+
+        if len(query_vector) == 0:
+            raise ValueError("Empty embedding vector")
+
+        # Ensure all values are floats
+        query_vector = [float(x) for x in query_vector]
+
+        logger.debug(f"Query vector dimension: {len(query_vector)}, first few values: {query_vector[:3]}")
+
+        # Build query with optional partition key filter
+        # The third parameter to VectorDistance is the distance metric: false = cosine, true = euclidean
+        if partition_key:
+            sql = """
+            SELECT TOP @k c.id, c.text, c.pk,
+                   VectorDistance(c.embedding, @queryVector, false) as distance
+            FROM c
+            WHERE IS_DEFINED(c.embedding) AND IS_ARRAY(c.embedding) AND c.pk = @pk
+            ORDER BY VectorDistance(c.embedding, @queryVector, false)
+            """
+            params = [
+                {"name": "@k", "value": int(k)},
+                {"name": "@queryVector", "value": [float(x) for x in query_vector]},
+                {"name": "@pk", "value": partition_key}
+            ]
+        else:
+            sql = """
+            SELECT TOP @k c.id, c.text, c.pk,
+                   VectorDistance(c.embedding, @queryVector, false) as distance
+            FROM c
+            WHERE IS_DEFINED(c.embedding) AND IS_ARRAY(c.embedding)
+            ORDER BY VectorDistance(c.embedding, @queryVector, false)
+            """
+            params = [
+                {"name": "@k", "value": int(k)},
+                {"name": "@queryVector", "value": [float(x) for x in query_vector]}
+            ]
+
+        logger.debug(f"Executing vector search with {len(query_vector)}-dimensional vector")
         results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
         logger.info(f"✅ Vector search returned {len(results)} results")
         return results
         
     except Exception as e:
         logger.error(f"❌ Vector search failed: {e}")
+        import traceback
+        logger.debug(f"Vector search traceback: {traceback.format_exc()}")
         return []
 
-async def retrieve_with_text_search(query: str, k: int = 5) -> List[Dict[str, Any]]:
+async def retrieve_with_text_search(query: str, k: int = 5, partition_key: str = None) -> List[Dict[str, Any]]:
     """Retrieve documents using text-based search as fallback"""
     try:
         client, container = get_cosmos_client()
         if client is None or container is None:
             raise Exception("Cosmos DB not available")
-        
-        # Use text-based search
-        sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.text, @query, true)"
-        params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}]
+
+        # Build query with optional partition key filter
+        if partition_key:
+            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.text, @query, true) AND c.pk = @pk"
+            params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}, {"name": "@pk", "value": partition_key}]
+        else:
+            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.text, @query, true)"
+            params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}]
+
         results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
-        
-        # If no results from text search, get some random documents
+
         if not results:
             logger.warning("No text search results, falling back to random documents")
-            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c"
-            params = [{"name": "@k", "value": k}]
+            if partition_key:
+                sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE c.pk = @pk"
+                params = [{"name": "@k", "value": k}, {"name": "@pk", "value": partition_key}]
+            else:
+                sql = "SELECT TOP @k c.id, c.text, c.pk FROM c"
+                params = [{"name": "@k", "value": k}]
             results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
-        
+
         logger.info(f"✅ Text search returned {len(results)} results")
         return results
-        
+
     except Exception as e:
         logger.error(f"❌ Text search failed: {e}")
         return []
 
-async def retrieve_with_hybrid_search(query: str, k: int = 5) -> List[Dict[str, Any]]:
+async def retrieve_with_hybrid_search(query: str, k: int = 5, partition_key: str = None) -> List[Dict[str, Any]]:
     """Retrieve documents using hybrid search (vector + text)"""
     try:
         # Try vector search first
-        vector_results = await retrieve_with_vector_search(query, k)
-        
+        vector_results = await retrieve_with_vector_search(query, k, partition_key)
+
         if vector_results:
             logger.info("✅ Using vector search results")
             return vector_results
-        
+
         # Fallback to text search
         logger.info("⚠️ Vector search failed, falling back to text search")
-        text_results = await retrieve_with_text_search(query, k)
-        
+        text_results = await retrieve_with_text_search(query, k, partition_key)
+
         if text_results:
             logger.info("✅ Using text search results")
             return text_results
-        
-        # Final fallback to mock data
-        logger.warning("⚠️ All search methods failed, using mock data")
-        return get_mock_documents(query, k)
-        
+
+        logger.warning("All search methods failed - returning empty results")
+        return []
+
     except Exception as e:
-        logger.error(f"❌ Hybrid search failed: {e}")
-        return get_mock_documents(query, k)
+        logger.error(f"Hybrid search failed: {e}")
+        return []
 
-def get_mock_documents(query: str, k: int = 5) -> List[Dict[str, Any]]:
-    """Get mock documents as final fallback"""
-    mock_docs = [
-        {"id": "product-001", "text": "Wireless Bluetooth Headphones: Premium noise-canceling headphones with 30-hour battery life. Price: $199.99. Category: Electronics. In stock: 45 units.", "pk": "ecommerce"},
-        {"id": "product-002", "text": "Smart Fitness Watch: Water-resistant fitness tracker with heart rate monitoring and GPS. Price: $149.99. Category: Wearables. In stock: 23 units.", "pk": "ecommerce"},
-        {"id": "product-003", "text": "Organic Coffee Beans: Single-origin Ethiopian coffee beans, medium roast. Price: $24.99. Category: Food & Beverage. In stock: 67 units.", "pk": "ecommerce"},
-        {"id": "shipping-001", "text": "Free shipping on orders over $50. Standard shipping: 3-5 business days. Express shipping: 1-2 business days for $9.99.", "pk": "ecommerce"},
-        {"id": "return-001", "text": "30-day return policy for all items. Items must be in original condition with tags. Free return shipping provided.", "pk": "ecommerce"},
-        {"id": "warranty-001", "text": "1-year manufacturer warranty on electronics. Extended warranty available for purchase. Contact support for warranty claims.", "pk": "ecommerce"}
-    ]
-    
-    # Filter mock docs based on query keywords
-    query_lower = query.lower()
-    filtered_docs = []
-    
-    for doc in mock_docs:
-        text_lower = doc["text"].lower()
-        if any(keyword in text_lower for keyword in query_lower.split()):
-            filtered_docs.append(doc)
-    
-    # If no matches, return first k documents
-    if not filtered_docs:
-        filtered_docs = mock_docs[:k]
-    else:
-        filtered_docs = filtered_docs[:k]
-    
-    logger.info(f"✅ Using {len(filtered_docs)} mock documents")
-    return filtered_docs
-
-async def retrieve(query: str, k: int = 5, search_type: str = "hybrid") -> List[Dict[str, Any]]:
+async def retrieve(query: str, k: int = 5, search_type: str = "hybrid", partition_key: str = None) -> List[Dict[str, Any]]:
     """
     Retrieve relevant documents using the specified search method
-    
+
     Args:
         query: The search query
         k: Number of documents to retrieve
         search_type: Type of search ("vector", "text", "hybrid")
-    
+        partition_key: Optional partition key to filter results (prevents cross-partition contamination)
+
     Returns:
         List of retrieved documents with metadata
     """
     logger.info(f"🔍 Retrieving documents for query: '{query}' (k={k}, type={search_type})")
-    
+
     try:
         if search_type == "vector":
-            results = await retrieve_with_vector_search(query, k)
+            results = await retrieve_with_vector_search(query, k, partition_key)
         elif search_type == "text":
-            results = await retrieve_with_text_search(query, k)
+            results = await retrieve_with_text_search(query, k, partition_key)
         else:  # hybrid
-            results = await retrieve_with_hybrid_search(query, k)
-        
+            results = await retrieve_with_hybrid_search(query, k, partition_key)
+
         # Add metadata to results
         for i, result in enumerate(results):
             result["retrieval_rank"] = i + 1
             result["search_type"] = search_type
-        
+
         logger.info(f"✅ Retrieved {len(results)} documents")
         return results
-        
+
     except Exception as e:
         logger.error(f"❌ Document retrieval failed: {e}")
-        return get_mock_documents(query, k)
+        return []
 
 async def assess_retrieval_quality(query: str, retrieved_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
@@ -245,11 +280,9 @@ async def assess_retrieval_quality(query: str, retrieved_docs: List[Dict[str, An
                 "suggestions": ["Try a different query", "Check database connectivity"]
             }
         
-        # Simple quality assessment based on document count and content
         doc_count = len(retrieved_docs)
         query_words = set(query.lower().split())
         
-        # Check relevance by counting query word matches
         total_matches = 0
         for doc in retrieved_docs:
             doc_text = doc.get("text", "").lower()
@@ -259,11 +292,9 @@ async def assess_retrieval_quality(query: str, retrieved_docs: List[Dict[str, An
         avg_matches = total_matches / doc_count if doc_count > 0 else 0
         relevance_score = min(avg_matches / len(query_words), 1.0) if query_words else 0.0
         
-        # Calculate confidence based on document count and relevance
-        count_score = min(doc_count / 3, 1.0)  # Prefer 3+ documents
+        count_score = min(doc_count / 3, 1.0)
         confidence = (relevance_score * 0.7 + count_score * 0.3)
         
-        # Determine issues and suggestions
         issues = []
         suggestions = []
         

@@ -1,18 +1,17 @@
-# models.py - Pydantic models for Sports Analyst Agentic RAG implementation
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from enum import Enum
 
 class RAGQuery(BaseModel):
     """Model for RAG query input"""
-    query: str = Field(description="The user's sports query")
+    query: str = Field(description="The user's query")
     max_retrieval_attempts: Optional[int] = Field(3, description="Maximum number of retrieval attempts")
     confidence_threshold: Optional[float] = Field(0.7, description="Confidence threshold for retrieval quality")
 
 class RAGResponse(BaseModel):
     """Response model for Agentic RAG queries"""
-    query: str = Field(description="The original sports query")
-    answer: str = Field(description="Generated sports analysis based on retrieved documents")
+    query: str = Field(description="The original query")
+    answer: str = Field(description="Generated answer based on retrieved documents")
     sources: List[Dict[str, Any]] = Field(description="List of retrieved source documents")
     confidence_score: float = Field(description="Confidence score for the retrieval quality (0-1)")
     retrieval_attempts: int = Field(description="Number of retrieval attempts made")
@@ -36,68 +35,10 @@ class RetrievalQualityAssessment(BaseModel):
 
 class QueryRefinement(BaseModel):
     """Model for query refinement suggestions"""
-    original_query: str = Field(description="The original sports query")
-    refined_query: str = Field(description="The refined sports query")
+    original_query: str = Field(description="The original query")
+    refined_query: str = Field(description="The refined query")
     refinement_reason: str = Field(description="Reason for the refinement")
     confidence_improvement: Optional[float] = Field(None, description="Expected confidence improvement")
-
-# Sports-specific models
-class SportType(str, Enum):
-    """Enum for different sports types"""
-    NFL = "nfl"
-    NBA = "nba"
-    SOCCER = "soccer"
-    TENNIS = "tennis"
-    BASEBALL = "baseball"
-    HOCKEY = "hockey"
-    GOLF = "golf"
-    OTHER = "other"
-
-class AnalysisType(str, Enum):
-    """Enum for different types of sports analysis"""
-    STATISTICS = "statistics"
-    PERFORMANCE = "performance"
-    TRENDS = "trends"
-    STANDINGS = "standings"
-    PREDICTIONS = "predictions"
-    COMPARISON = "comparison"
-    INJURY = "injury"
-    TRADE = "trade"
-
-class SportsAnalysisResponse(BaseModel):
-    """Enhanced response model for sports analysis queries"""
-    query: str = Field(description="The original sports query")
-    analysis: str = Field(description="Comprehensive sports analysis")
-    sport_type: Optional[SportType] = Field(None, description="Type of sport analyzed")
-    analysis_type: Optional[AnalysisType] = Field(None, description="Type of analysis performed")
-    sources: List[Dict[str, Any]] = Field(description="List of retrieved source documents")
-    confidence_score: float = Field(description="Confidence score for the analysis (0-1)")
-    key_statistics: Optional[Dict[str, Any]] = Field(None, description="Key statistics extracted")
-    trends: Optional[List[str]] = Field(None, description="Identified trends")
-    predictions: Optional[List[str]] = Field(None, description="Predictions or insights")
-    retrieval_attempts: int = Field(description="Number of retrieval attempts made")
-    needs_recheck: bool = Field(description="Whether re-checking was needed")
-    reasoning: str = Field(description="Reasoning for the analysis quality")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata")
-
-class PlayerPerformance(BaseModel):
-    """Model for player performance data"""
-    player_name: str = Field(description="Name of the player")
-    team: str = Field(description="Team name")
-    position: str = Field(description="Player position")
-    statistics: Dict[str, Any] = Field(description="Player statistics")
-    performance_rating: Optional[float] = Field(None, description="Overall performance rating")
-    trends: Optional[List[str]] = Field(None, description="Performance trends")
-
-class TeamPerformance(BaseModel):
-    """Model for team performance data"""
-    team_name: str = Field(description="Name of the team")
-    league: str = Field(description="League name")
-    record: str = Field(description="Team record (wins-losses)")
-    statistics: Dict[str, Any] = Field(description="Team statistics")
-    strengths: Optional[List[str]] = Field(None, description="Team strengths")
-    weaknesses: Optional[List[str]] = Field(None, description="Team weaknesses")
-    recent_form: Optional[str] = Field(None, description="Recent form description")
 
 # Legacy models for backward compatibility
 class OrderStatus(str, Enum):
