@@ -1,58 +1,113 @@
 # Exercise Solution
 
-[VIDEO_PLACEHOLDER: Evaluating Agents — Rule-Based and LLM-as-Judge]
+[VIDEO_PLACEHOLDER: Evaluating Agents — Rule-Based Evaluation]
 
 ### **Solution Walkthrough**
 
-We add a rule-based evaluator that checks structural criteria against canned cases, and an optional LLM-as-judge path if Azure OpenAI is configured.
+The solution implements rule-based evaluation logic in `eval/judge.py` to validate agent responses against specific criteria.
+
+#### **Step 1: Check Response Validity**
 
 ```python
-# Rule-based evaluation (excerpt)
-from eval.judge import evaluate, TEST_CASES
-results = []
-for case in TEST_CASES:
-    outcome = evaluate(case)
-    results.append({**case["input"], **outcome})
+valid_json = response is not None
 ```
 
-The LLM judge is created only when environment vars exist; otherwise we skip gracefully.
+This checks if the agent returned a valid response object (not None).
+
+#### **Step 2: Check Structured Data**
 
 ```python
-# Conditional kernel setup for LLM-as-judge
-endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-key = os.getenv("AZURE_OPENAI_KEY")
-if all([endpoint, key, os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT")]):
-    kernel = Kernel()
-    kernel.add_service(AzureChatCompletion(...))
-else:
-    kernel = None  # judge skipped
+has_structured_data = hasattr(response, 'structured_data') and response.structured_data is not None
 ```
 
-We then prepare structured cases using a mock agent and ask the LLM judge to score them, emitting a concise report.
+This verifies that the response has a `structured_data` attribute and it's not empty.
+
+#### **Step 3: Check Tools Used**
 
 ```python
-agent = MockAgent()
-llm_cases = []
-for case in TEST_CASES:
-    agent_resp = await agent.process_query(case["input"]["query"], case["input"]["query_type"])
-    llm_cases.append({
-        "user_query": case["input"]["query"],
-        "agent_response": agent_resp.human_readable_response,
-        "structured_output": agent_resp.model_dump(),
-        "tool_calls": [{"name": t, "arguments": {}} for t in agent_resp.tools_used],
-        "citations": [],
-        "reference_facts": [f"Reference hint for '{case['input']['query_type']}'"],
-    })
+has_tools_used = hasattr(response, 'tools_used') and len(response.tools_used) > 0
 ```
 
-```
-📊 Combined report shows rule-based pass rate and LLM judge metrics
+This confirms the agent used at least one tool to answer the query.
+
+#### **Step 4: Check Confidence Score**
+
+```python
+has_confidence_score = hasattr(response, 'confidence_score') and response.confidence_score > 0
 ```
 
-[IMAGE_PLACEHOLDER: Screengrab of terminal report for both evaluators]
+This validates that the agent provided a confidence score greater than 0.
+
+#### **Step 5: Return Evaluation Results**
+
+```python
+return {
+    "valid_json": valid_json,
+    "has_structured_data": has_structured_data,
+    "has_tools_used": has_tools_used,
+    "has_confidence_score": has_confidence_score,
+    "appropriate_tools": appropriate_tools
+}
+```
+
+The function returns a dictionary with all five boolean evaluation criteria.
+
+### **Expected Output**
+
+When you run `python main.py`, you should see:
+
+```
+🚀 Lesson 10 – Evaluation demo
+
+================================================================================
+🔍 Rule-Based Evaluation
+================================================================================
+
+📋 Test 1/4: Order Status Query
+   Query: What's the status of my order ORD-001?
+   Type : order_status
+   ✅ PASSED
+   ✅ valid_json: True
+   ✅ has_structured_data: True
+   ✅ has_tools_used: True
+   ✅ has_confidence_score: True
+   ✅ appropriate_tools: True
+
+[... similar for tests 2-4 ...]
+
+📊 Rule-Based Summary
+   Passed 4/4  (100.0%)
+
+================================================================================
+⚖️  LLM-as-Judge Evaluation
+================================================================================
+🔄 Running LLM judge on 4 cases...
+
+📊 LLM-as-Judge Summary
+   Total: 4
+   Avg Score: 3.95/5.0
+   Pass Rate: 100.0%
+   Case 1: ✅ PASSED  (Score 4.00)
+   Case 2: ✅ PASSED  (Score 4.00)
+   Case 3: ✅ PASSED  (Score 4.00)
+   Case 4: ✅ PASSED  (Score 3.80)
+
+================================================================================
+📒 Combined Report
+================================================================================
+🔍 Rule-based pass rate: 100.0%
+⚖️  LLM judge avg score: 3.95/5.0
+⚖️  LLM judge pass rate: 100.0%
+
+🎯 Overall blended score: 1.00
+
+✅ Done. CSV from rule-based saved by judge.py (eval/results.csv).
+```
+
+[IMAGE_PLACEHOLDER: Screengrab of terminal showing evaluation output]
 
 ### **Key Takeaway**
 
-> The solution adds automated evaluation via rules and (optionally) an LLM judge, producing a compact report for quick comparison.
+> The solution demonstrates how to implement rule-based evaluation criteria to validate agent responses systematically. Combined with LLM-as-judge, this provides comprehensive quality assurance for AI agents.
 
 [INSTRUCTIONS FOR ACCESSING THE SOLUTION ENVIRONMENT]

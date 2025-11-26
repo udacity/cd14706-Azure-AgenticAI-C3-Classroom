@@ -1,28 +1,52 @@
 # Exercise
 
-Add a rule‑based evaluator and an optional LLM‑as‑judge path, then produce a combined report comparing both.
+Implement the rule-based evaluation logic in `eval/judge.py` to validate agent responses.
 
 ### **Prerequisites**
 
-* Ability to write small evaluation functions and print reports
-
-* Optional: Azure OpenAI configured for LLM judge
-
+* Understanding of Pydantic models and response validation
+* Familiarity with Python dictionaries and boolean logic
 * Lessons 1–9 completed
 
 ### **Instructions**
 
-1. Implement `run_rule_based()` that iterates `TEST_CASES`, calls `evaluate(case)`, prints per‑case pass/fail and criteria flags, and returns the list of outcomes.
+In `eval/judge.py`, complete the `evaluate()` function:
 
-2. Implement `_maybe_create_kernel()` that returns a configured `Kernel` with `AzureChatCompletion` only when `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY`, and `AZURE_OPENAI_CHAT_DEPLOYMENT` are available; otherwise return `None` and log a warning.
+1. **Check response validity** (line 42):
+   - Set `valid_json = response is not None`
 
-3. Implement `run_llm_judge()`:
-   - Call `_maybe_create_kernel()` and skip if it returns `None`.
-   - Build `llm_cases` by calling `MockAgent().process_query(query, query_type)` per test to capture a realistic agent output; include `human_readable_response`, `structured_output` (as dict), `tool_calls`, and optional reference facts.
-   - Invoke `LLMJudge(kernel).evaluate_batch(llm_cases)` and print a brief summary (total, average score, pass rate, per‑case status).
+2. **Check structured data** (line 43):
+   - Set `has_structured_data = hasattr(response, 'structured_data') and response.structured_data is not None`
 
-4. Implement `combined_report(rule_results, llm_results)` to print the rule‑based pass rate and, if available, LLM judge averages and a blended score.
+3. **Check tools used** (line 44):
+   - Set `has_tools_used = hasattr(response, 'tools_used') and len(response.tools_used) > 0`
 
-5. In `_amain()`, run the rule‑based evaluator, then the LLM judge, and pass both to `combined_report(...)`. Ensure the script prints a final done message.
+4. **Check confidence score** (line 45):
+   - Set `has_confidence_score = hasattr(response, 'confidence_score') and response.confidence_score > 0`
+
+5. **Return evaluation results** (line 61):
+   - Return a dictionary with all five boolean fields:
+     ```python
+     return {
+         "valid_json": valid_json,
+         "has_structured_data": has_structured_data,
+         "has_tools_used": has_tools_used,
+         "has_confidence_score": has_confidence_score,
+         "appropriate_tools": appropriate_tools
+     }
+     ```
+
+### **Running the Exercise**
+
+After implementing the TODOs in `judge.py`, run:
+
+```bash
+python main.py
+```
+
+You should see:
+- Rule-based evaluation results for 4 test cases
+- LLM-as-judge evaluation (if Azure OpenAI is configured)
+- Combined report with pass rates
 
 `[INSTRUCTIONS FOR ACCESSING THE EXERCISE ENVIRONMENT]`
