@@ -6,17 +6,20 @@
 
 We add Cosmos‑backed RAG utilities using Semantic Kernel's embedding service and demonstrate both upserting and text-based retrieval, then tie this into the agent's tool ecosystem.
 
+**Important Note:** The `pk` field is used for filtering data (e.g., `pk="ecommerce"` vs `pk="sports"`), but it's NOT the partition key. The actual partition key is `/id` (defined in `.env`), meaning each document's `id` field is the partition key value. This solution can work with either a shared container or a separate `ecomm_docs` container.
+
 ```python
 # Upsert test snippets (excerpt)
 for product_id, text in test_products:
-    upsert_snippet(product_id, text, pk="test")
+    upsert_snippet(product_id, text, pk="ecommerce")
 ```
 
-We then retrieve with text-based search (CONTAINS) and log concise snippets to validate indexing and search functionality.
+We then retrieve with text-based search (CONTAINS) and log concise snippets to validate indexing and search functionality. The `pk` field helps us filter ecommerce data from sports data in the same container.
 
 ```python
 # Retrieve with text-based search (excerpt)
-results = await retrieve(query, k=3, partition_key="test")
+# Note: We filter by pk field, not partition key
+results = await retrieve(query, k=3)
 for i, r in enumerate(results, 1):
     logger.info(f"{i}. {r.get('id')}: {r.get('text', '')[:100]}...")
 ```
