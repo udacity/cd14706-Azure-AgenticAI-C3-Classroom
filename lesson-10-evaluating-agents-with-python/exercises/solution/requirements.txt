@@ -1,25 +1,5 @@
-# Long-Term Agent Memory Management with Python, OpenAI, and Cosmos DB
-# Requirements for lesson-9-maintaining-long-term-agent-memory-in-python
-
-# Core dependencies
-numpy>=2.3.2
-pandas>=2.3.1
-
-# Azure Cosmos DB
-azure-cosmos>=4.5.1
-azure-identity>=1.15.0
-
-# Semantic Kernel for OpenAI integration
-semantic-kernel>=1.0.0
-
-# Environment and configuration
-python-dotenv>=1.0.0
-
-# Async support
-asyncio-mqtt>=0.16.1
-
-# Data processing
-pydantic>=2.5.0
-
-# Logging and utilities
-structlog>=23.2.0
+python-dotenv==1.0.0
+pydantic==2.5.0
+azure-identity==1.15.0
+azure-cosmos==4.5.1
+semantic-kernel==1.36.1
