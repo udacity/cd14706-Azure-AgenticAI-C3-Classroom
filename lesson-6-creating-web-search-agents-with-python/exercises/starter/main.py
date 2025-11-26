@@ -19,7 +19,10 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
-from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding, OpenAIChatPromptExecutionSettings
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.contents import ChatHistory
 from semantic_kernel.functions import KernelArguments
 from tools.order_status import OrderStatusTools
 from tools.product_info import ProductInfoTools
@@ -182,20 +185,29 @@ async def process_customer_query(kernel: Kernel, query: str) -> CustomerServiceR
     """Process a customer query using Semantic Kernel and return validated response"""
     try:
         logger.info(f"🤖 Processing customer query: {query}")
-        
-        # Create the prompt with the customer query
-        prompt = f"{create_customer_service_prompt()}\n\nCustomer query: {query}"
-        
-        # Create a function from the prompt
-        customer_service_function = kernel.add_function(
-            function_name="customer_service",
-            plugin_name="customer_service",
-            prompt=prompt
+
+        # Get chat service
+        chat_service = kernel.get_service(type=ChatCompletionClientBase)
+
+        # Create chat history with system prompt and user query
+        chat_history = ChatHistory()
+        chat_history.add_system_message(create_customer_service_prompt())
+        chat_history.add_user_message(query)
+
+        # Enable automatic function calling
+        execution_settings = OpenAIChatPromptExecutionSettings(
+            temperature=0.7,
+            max_tokens=1000,
+            function_choice_behavior=FunctionChoiceBehavior.Auto()
         )
-        
-        # Execute the function
-        result = await kernel.invoke(customer_service_function)
-        response_text = str(result)
+
+        # Execute with automatic function calling
+        response = await chat_service.get_chat_message_contents(
+            chat_history=chat_history,
+            settings=execution_settings,
+            kernel=kernel
+        )
+        response_text = response[0].content
         
         logger.info("📝 Raw LLM response received")
         logger.debug(f"Response: {response_text}")

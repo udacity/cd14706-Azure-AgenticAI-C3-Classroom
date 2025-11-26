@@ -7,9 +7,10 @@ import logging
 import asyncio
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
-from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
-from semantic_kernel.functions import KernelArguments
-from semantic_kernel.functions.function_result import FunctionResult
+from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding, OpenAIChatPromptExecutionSettings
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.contents import ChatHistory
 from tools.search import SearchTools
 
 load_dotenv()
@@ -64,20 +65,30 @@ async def test_sports_web_search(kernel: Kernel):
     logger.info("=" * 60)
 
     try:
-        search_function = kernel.plugins["sports_search"].functions["sports_web_search"]
-        args = KernelArguments(query="latest NBA highlights", max_results=3)
+        # Get chat service
+        chat_service = kernel.get_service(type=ChatCompletionClientBase)
 
-        result: FunctionResult = await kernel.invoke(search_function, args)
-        result_value = result.value
+        # Create chat history
+        chat_history = ChatHistory()
+        chat_history.add_user_message("latest NBA highlights")
 
-        if isinstance(result_value, str):
-            result_value = json.loads(result_value)
+        # Enable automatic function calling
+        execution_settings = OpenAIChatPromptExecutionSettings(
+            temperature=0.7,
+            max_tokens=1000,
+            function_choice_behavior=FunctionChoiceBehavior.Auto()
+        )
 
-        logger.info("\n🔎 Top Bing Sports Search Results:")
-        for i, item in enumerate(result_value, 1):
-            logger.info(f"{i}. {item.get('title', 'No title')}")
-            logger.info(f"   URL: {item.get('url', 'No URL')}")
-            logger.info(f"   Snippet: {item.get('snippet', 'No snippet')}\n")
+        # LLM will automatically call the search function
+        response = await chat_service.get_chat_message_contents(
+            chat_history=chat_history,
+            settings=execution_settings,
+            kernel=kernel
+        )
+
+        result_value = response[0].content
+
+        logger.info(f"\n🔎 Search Results:\n{result_value}\n")
 
     except Exception as e:
         logger.error(f"❌ Sports search test failed: {e}")
