@@ -20,7 +20,7 @@ Integrate Cosmos DB RAG utilities, upsert sample snippets, retrieve with vector 
    - Upserts several test product texts using `upsert_snippet(product_id, text, pk=...)`.
    - For a small list of queries, calls `await retrieve(query, k=3)` and logs each result’s `id` and first ~100 characters of `text`.
 
-3. In `create_kernel()`, keep the standard Azure OpenAI setup and register the ecommerce tools (`inventory`, `shipping`, `pricing`, `recommendations`, `reviews`).
+3. In `create_kernel()`, keep the standard Semantic Kernel setup with Azure OpenAI services and register the ecommerce tools as Semantic Kernel plugins (`inventory`, `shipping`, `pricing`, `recommendations`, `reviews`).
 
 4. In `main()`, call `asyncio.run(test_cosmos_db_operations())` before the external API tests to validate the database path first.
 

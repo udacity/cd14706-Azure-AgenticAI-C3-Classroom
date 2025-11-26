@@ -19,7 +19,7 @@ class ProductInfoTools:
         try:
             logger.info(f"Getting product info for product ID: {product_id}")
             
-            # Mock product data - in a real application, this would query a database
+            # Simulated database query - uses mock data for demonstration purposes
             mock_products = {
                 "PROD-001": {
                     "product_id": "PROD-001",

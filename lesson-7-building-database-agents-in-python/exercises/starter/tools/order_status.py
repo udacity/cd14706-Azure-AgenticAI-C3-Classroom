@@ -19,7 +19,7 @@ class OrderStatusTools:
         try:
             logger.info(f"Getting order status for order ID: {order_id}")
             
-            # Mock order data - in a real application, this would query a database
+            # Simulated database query - uses mock data for demonstration purposes
             mock_orders = {
                 "ORD-001": {
                     "order_id": "ORD-001",

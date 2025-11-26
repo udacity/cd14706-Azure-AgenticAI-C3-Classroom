@@ -1,15 +1,4 @@
-# lesson-7-building-database-agents-in-python/exercises/solution/main.py - Ecommerce Database Agent with Cosmos DB
-"""
-Ecommerce Database Agent with Cosmos DB Integration
-
-This demo focuses on:
-- Testing Cosmos DB integration with Semantic Kernel
-- Demonstrating RAG (Retrieval-Augmented Generation) with vector search
-- Database upserting and reading operations
-- Ecommerce product information retrieval
-- Vector embeddings and similarity search
-- Live database response validation and processing
-"""
+# Ecommerce Database Agent with Cosmos DB
 
 import os
 import sys
@@ -20,8 +9,8 @@ from datetime import datetime
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
-from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
-from semantic_kernel.functions import KernelArguments
+from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding, OpenAIChatPromptExecutionSettings
+from semantic_kernel.contents import ChatHistory
 from tools.order_status import OrderStatusTools
 from tools.product_info import ProductInfoTools
 from tools.inventory import InventoryTools
@@ -224,14 +213,18 @@ async def process_customer_query(kernel: Kernel, query: str) -> CustomerServiceR
         # Create the prompt with the customer query
         prompt = f"{create_customer_service_prompt()}\n\nCustomer query: {query}"
         
-        # Create a function from the prompt
+        # TODO: Use ChatCompletionService directly for better control
+        # Hint: Get service with kernel.get_service(type="ChatCompletionService")
+        # Create ChatHistory, add user message with prompt
+        # Create OpenAIChatPromptExecutionSettings(temperature=0.7, max_tokens=2000)
+        # Call chat_service.get_chat_message_contents() and extract response[0].content
+
+        # Temporary placeholder - replace with ChatCompletionService implementation
         customer_service_function = kernel.add_function(
             function_name="customer_service",
             plugin_name="customer_service",
             prompt=prompt
         )
-        
-        # Execute the function
         result = await kernel.invoke(customer_service_function)
         response_text = str(result)
         
@@ -404,7 +397,7 @@ async def test_cosmos_db_operations():
         ]
         
         for product_id, product_text in test_products:
-            upsert_snippet(product_id, product_text, pk="test")
+            await upsert_snippet(product_id, product_text, pk="test")
             logger.info(f"   ✅ Upserted: {product_id}")
         
         logger.info("✅ All test products upserted successfully!")
@@ -422,7 +415,7 @@ async def test_cosmos_db_operations():
         
         for query in test_queries:
             logger.info(f"   🔍 Query: '{query}'")
-            results = await retrieve(query, k=3)
+            results = await retrieve(query, k=3, partition_key="test")
             
             if results:
                 logger.info(f"   📊 Found {len(results)} results:")

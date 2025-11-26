@@ -9,7 +9,7 @@ load_dotenv()
 
 # Initialize Cosmos client for sports data
 client = CosmosClient(os.environ["COSMOS_ENDPOINT"], os.environ["COSMOS_KEY"])
-print("✅ Using Cosmos DB connection key for sports data ingestion")
+print("Using Cosmos DB connection key for sports data ingestion")
 db = client.create_database_if_not_exists(id=os.environ["COSMOS_DB"])
 container = db.create_container_if_not_exists(
     id=os.environ["COSMOS_CONTAINER"],
@@ -44,6 +44,32 @@ async def embed_texts(texts):
             embeddings.append(list(result))
     return embeddings
 
+async def delete_all_items(partition_key: str):
+    """Delete all items with the specified partition key to prevent contamination between runs"""
+    try:
+        # Query all items with the specified partition key
+        query = "SELECT c.id FROM c WHERE c.pk = @pk"
+        params = [{"name": "@pk", "value": partition_key}]
+        items = list(container.query_items(query=query, parameters=params, enable_cross_partition_query=True))
+        
+        # Delete each item
+        deleted_count = 0
+        for item in items:
+            try:
+                container.delete_item(item=item["id"], partition_key=partition_key)
+                deleted_count += 1
+            except Exception as e:
+                error_msg = str(e).encode('ascii', 'ignore').decode('ascii')
+                print(f"Warning: Failed to delete item {item['id']}: {error_msg}")
+        
+        if deleted_count > 0:
+            print(f"Cleaned up {deleted_count} items with partition key '{partition_key}'")
+        return deleted_count
+    except Exception as e:
+        error_msg = str(e).encode('ascii', 'ignore').decode('ascii')
+        print(f"Failed to cleanup items: {error_msg}")
+        return 0
+
 async def upsert_snippet(doc_id, text, pk="sports"):
     """Upsert a document with its embedding into Cosmos DB"""
     try:
@@ -55,9 +81,10 @@ async def upsert_snippet(doc_id, text, pk="sports"):
             "text": text,
             "embedding": vec
         })
-        print(f"✅ {doc_id} upserted with Semantic Kernel embeddings.")
+        print(f"{doc_id} upserted with Semantic Kernel embeddings.")
     except Exception as e:
-        print(f"❌ Failed to upsert {doc_id}: {e}")
+        error_msg = str(e).encode('ascii', 'ignore').decode('ascii')
+        print(f"Failed to upsert {doc_id}: {error_msg}")
 
 async def main():
     """Main function to upsert sports data"""
@@ -70,7 +97,7 @@ async def main():
     await upsert_snippet("nba-news-001", "NBA Trade Rumors: Lakers looking for shooting help, Warriors considering roster changes. Recent trades: None significant. Free agency: Several role players available. Draft: 2024 class showing promise.")
     await upsert_snippet("nba-schedule-001", "NBA Schedule: Lakers vs Warriors tonight at 8:00 PM PST. Key matchups this week: Celtics vs Heat, Nuggets vs Suns. Playoff implications: High stakes for both teams.")
     await upsert_snippet("nba-stats-001", "NBA League Leaders: Scoring - Luka Doncic (32.4 PPG), Rebounds - Rudy Gobert (12.8 RPG), Assists - Tyrese Haliburton (12.1 APG). Team stats: Celtics best offense, Timberwolves best defense.")
-    print("✅ All sports snippets upserted with Semantic Kernel embeddings.")
+    print("All sports snippets upserted with Semantic Kernel embeddings.")
 
 if __name__ == "__main__":
     import asyncio

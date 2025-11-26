@@ -1,6 +1,8 @@
 from azure.cosmos import CosmosClient
 from azure.identity import DefaultAzureCredential
+from azure.cosmos.exceptions import CosmosHttpResponseError
 import os
+import asyncio
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureTextEmbedding
@@ -16,10 +18,10 @@ def get_cosmos_client():
     if _client is None:
         try:
             _client = CosmosClient(os.environ["COSMOS_ENDPOINT"], os.environ["COSMOS_KEY"])
-            print("✅ Using Cosmos DB connection key")
+            print("Using Cosmos DB connection key")
             _container = _client.get_database_client(os.environ["COSMOS_DB"]).get_container_client(os.environ["COSMOS_CONTAINER"])
         except Exception as e:
-            print(f"❌ Cosmos DB connection failed: {e}")
+            print(f"Cosmos DB connection failed: {e}")
             _client = None
             _container = None
     return _client, _container
@@ -37,7 +39,7 @@ def create_embedding_kernel():
             )
         )
     except Exception as e:
-        print(f"❌ Failed to create embedding kernel: {e}")
+        print(f"Failed to create embedding kernel: {e}")
         # Return None to trigger fallback
         return None
     return kernel
@@ -60,34 +62,81 @@ async def embed_texts(texts):
                 embeddings.append(list(result))
         return embeddings
     except Exception as e:
-        print(f"❌ Embedding generation failed: {e}")
-        # Fallback to mock embeddings
-        return [[0.1] * 1536 for _ in texts]  # Mock embedding vector
+        print(f"Embedding generation failed: {e}")
+        raise Exception(f"Failed to generate embeddings: {e}")
 
-async def retrieve(query: str, k: int = 5):
-    """Retrieve relevant documents using text search (fallback from vector similarity)"""
+async def _execute_query_with_retry(container, sql: str, params: list, enable_cross_partition: bool, max_retries: int = 3):
+    """Execute Cosmos DB query with retry logic for 400 errors (query plan issues)
+    
+    Cosmos DB CONTAINS queries sometimes fail with HTTP 400 on first attempt
+    because the query plan needs to be fetched. This function retries with
+    exponential backoff to handle this gracefully.
+    """
+    for attempt in range(max_retries):
+        try:
+            return list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=enable_cross_partition))
+        except CosmosHttpResponseError as e:
+            # Check if it's a 400 error (query plan issue) and not the last attempt
+            if e.status_code == 400 and attempt < max_retries - 1:
+                # Exponential backoff: 0.1s, 0.2s, 0.4s
+                wait_time = 0.1 * (2 ** attempt)
+                await asyncio.sleep(wait_time)
+                continue
+            # Re-raise if not a 400 error or if it's the last attempt
+            raise
+        except Exception as e:
+            error_str = str(e).lower()
+            # Fallback: check error message for 400 errors (in case exception type differs)
+            if ("400" in error_str or "bad request" in error_str) and attempt < max_retries - 1:
+                # Exponential backoff: 0.1s, 0.2s, 0.4s
+                wait_time = 0.1 * (2 ** attempt)
+                await asyncio.sleep(wait_time)
+                continue
+            # Re-raise if not a 400 error or if it's the last attempt
+            raise
+    return []
+
+async def retrieve(query: str, k: int = 5, partition_key: str = None):
+    """Retrieve relevant documents using text search (fallback from vector similarity)
+    
+    Args:
+        query: Search query text
+        k: Number of results to return
+        partition_key: Optional partition key to filter results (prevents cross-partition contamination)
+    """
     try:
         client, container = get_cosmos_client()
         if client is None or container is None:
             raise Exception("Cosmos DB not available")
-            
-        # For now, use text-based search instead of vector similarity
-        # This is a fallback until vector search is properly configured
-        sql = "SELECT TOP @k c.id, c.text FROM c WHERE CONTAINS(c.text, @query, true)"
-        params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}]
-        results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
         
-        # If no results from text search, get some random documents
+        # Build query with optional partition key filter
+        if partition_key:
+            # Filter by partition key to prevent contamination from other runs
+            # Note: CONTAINS() requires enable_cross_partition=True even with partition key filter
+            sql = "SELECT TOP @k c.id, c.text FROM c WHERE CONTAINS(c.text, @query, true) AND c.pk = @pk"
+            params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}, {"name": "@pk", "value": partition_key}]
+            enable_cross_partition = True
+        else:
+            # Legacy behavior: search across all partitions
+            sql = "SELECT TOP @k c.id, c.text FROM c WHERE CONTAINS(c.text, @query, true)"
+            params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}]
+            enable_cross_partition = True
+            
+        results = await _execute_query_with_retry(container, sql, params, enable_cross_partition)
+        
+        # If no results from text search, get some random documents (with partition key filter if provided)
         if not results:
-            sql = "SELECT TOP @k c.id, c.text FROM c"
-            params = [{"name": "@k", "value": k}]
-            results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
+            if partition_key:
+                sql = "SELECT TOP @k c.id, c.text FROM c WHERE c.pk = @pk"
+                params = [{"name": "@k", "value": k}, {"name": "@pk", "value": partition_key}]
+                enable_cross_partition = True
+            else:
+                sql = "SELECT TOP @k c.id, c.text FROM c"
+                params = [{"name": "@k", "value": k}]
+                enable_cross_partition = True
+            results = await _execute_query_with_retry(container, sql, params, enable_cross_partition)
             
         return results
     except Exception as e:
-        print(f"❌ RAG retrieval failed: {e}")
-        # Fallback to mock ecommerce data
-        return [
-            {"id": "product-001", "text": "Wireless Bluetooth Headphones: Premium noise-canceling headphones with 30-hour battery life. Price: $199.99. Category: Electronics. In stock: 45 units."},
-            {"id": "shipping-001", "text": "Free shipping on orders over $50. Standard shipping: 3-5 business days. Express shipping: 1-2 business days for $9.99."}
-        ]
+        print(f"RAG retrieval failed: {e}")
+        return []
