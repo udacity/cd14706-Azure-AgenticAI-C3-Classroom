@@ -188,6 +188,10 @@ def parse_and_validate_response(response_text: str, query_type: str) -> Customer
                     order_data["status"] = "not_found"
                 if order_data.get("items") is None:
                     order_data["items"] = []
+                elif isinstance(order_data.get("items"), list):
+                    # Ensure items are strings, not dicts
+                    order_data["items"] = [str(item.get("name", item)) if isinstance(item, dict) else
+                                            str(item) for item in order_data["items"]]
 
                 order_response = OrderResponse(**order_data)
                 logger.info(f"✅ Order data validated: {order_response.order_id} - {order_response.status}")
@@ -203,6 +207,19 @@ def parse_and_validate_response(response_text: str, query_type: str) -> Customer
                 # Map invalid availability values to valid enum values
                 if product_data.get("availability") == "not_available":
                     product_data["availability"] = "out_of_stock"
+                elif product_data.get("availability") not in ["in_stock", "out_of_stock", "discontinued", None]:
+                    # Map common invalid values to valid enum values
+                    availability_mapping = {
+                        "not found": "out_of_stock",
+                        "unavailable": "out_of_stock",
+                        "available": "in_stock",
+                        "yes": "in_stock",
+                        "no": "out_of_stock"
+                    }
+                    product_data["availability"] = availability_mapping.get(
+                        str(product_data["availability"]).lower(),
+                        "out_of_stock"
+                    )
                 # Add fallbacks
                 if product_data.get("product_id") is None:
                     product_data["product_id"] = "PROD-UNKNOWN"
