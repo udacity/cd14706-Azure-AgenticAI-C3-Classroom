@@ -67,15 +67,7 @@ python main.py
 
 ## Expected Output
 
-The demo will show:
-
-1. **Kernel Setup**: Azure services configuration and tool registration
-2. **Available Tools**: List of sports analysis functions
-3. **Demo Scenarios**:
-   - NBA scores retrieval
-   - Player statistics lookup (LeBron James)
-   - NFL team-specific scores (Kansas City Chiefs)
-   - Player search (Patrick Mahomes)
+The script will display the kernel setup process, including the registration of the sports analysis tools. It will then show a list of available tools and functions before executing a query to fetch the latest NBA game scores.
 
 ## Sample Data
 

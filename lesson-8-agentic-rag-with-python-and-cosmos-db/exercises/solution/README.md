@@ -1,4 +1,4 @@
-# Exercise Solution
+# Exercise Solution - Agentic RAG with E-commerce Data
 
 [VIDEO_PLACEHOLDER: Agentic RAG with Cosmos DB]
 

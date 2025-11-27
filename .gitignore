@@ -34,4 +34,6 @@ build/
 *.egg-info/
 
 # Custom files to ignore
-lesson-2-implementing-structured-outputs-with-pydantic/demo/main_modern.py
+
+lesson-2-implementing-structured-outputs-with-pydantic/demo/main_archive.py
+

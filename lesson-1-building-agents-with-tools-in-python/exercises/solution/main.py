@@ -12,7 +12,11 @@ import sys
 import logging
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
-from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding
+import asyncio
+from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding, OpenAIChatPromptExecutionSettings
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
+from semantic_kernel.contents import ChatHistory
 from tools.order_status import OrderStatusTools
 from tools.product_info import ProductInfoTools
 
@@ -26,6 +30,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Suppress verbose logs from specific modules
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('semantic_kernel').setLevel(logging.WARNING)
+
 
 def create_kernel():
     """Create and configure Semantic Kernel with Azure services and tools"""
@@ -33,22 +41,15 @@ def create_kernel():
         logger.info("🚀 Starting Semantic Kernel setup...")
         
         # Get Azure configuration
-        logger.info("📋 Retrieving Azure OpenAI configuration from environment variables...")
         AZURE_OPENAI_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
         AZURE_OPENAI_API_VERSION = os.environ["AZURE_OPENAI_API_VERSION"]
         DEPLOYMENT_CHAT = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]
         DEPLOYMENT_EMBED = os.environ["AZURE_OPENAI_EMBED_DEPLOYMENT"]
         AZURE_OPENAI_KEY = os.environ["AZURE_OPENAI_KEY"]
         
-        logger.info(f"✅ Configuration loaded - Endpoint: {AZURE_OPENAI_ENDPOINT}")
-        logger.info(f"📊 Chat deployment: {DEPLOYMENT_CHAT}, Embedding deployment: {DEPLOYMENT_EMBED}")
-        
-        # Create kernel
-        logger.info("🔧 Creating Semantic Kernel instance...")
+        # Create kernel and add services/tools
+        logger.info("🔧 Creating Semantic Kernel instance and adding services/tools...")
         kernel = Kernel()
-        
-        # Add Azure services
-        logger.info("🤖 Adding Azure Chat Completion service...")
         kernel.add_service(
             AzureChatCompletion(
                 deployment_name=DEPLOYMENT_CHAT,
@@ -58,8 +59,6 @@ def create_kernel():
             )
         )
         logger.info("✅ Azure Chat Completion service added successfully")
-        
-        logger.info("🧠 Adding Azure Text Embedding service...")
         kernel.add_service(
             AzureTextEmbedding(
                 deployment_name=DEPLOYMENT_EMBED,
@@ -69,12 +68,10 @@ def create_kernel():
             )
         )
         logger.info("✅ Azure Text Embedding service added successfully")
-        
         # Add tools as SK plugins
         logger.info("🛠️ Adding custom tools as Semantic Kernel plugins...")
         kernel.add_plugin(OrderStatusTools(), "order_status")
         logger.info("✅ OrderStatusTools plugin added successfully")
-        
         kernel.add_plugin(ProductInfoTools(), "product_info")
         logger.info("✅ ProductInfoTools plugin added successfully")
         
@@ -89,24 +86,95 @@ def create_kernel():
         raise
 
 
-def main():
-    """Main function to demonstrate the kernel setup"""
+
+
+async def chat_with_agent(kernel: Kernel, user_query: str) -> str:
+
+
+    """Run a single chat turn with the agent."""
+
+
+    try:
+
+
+        chat_service = kernel.get_service(type=ChatCompletionClientBase)
+
+
+        chat_history = ChatHistory()
+
+
+
+
+        system_message = """You are a helpful e-commerce customer service agent.
+
+
+You have access to tools that can help you check order status and product information.
+
+Use these tools when a customer asks a relevant question."""
+
+
+
+
+        chat_history.add_system_message(system_message)
+
+
+        chat_history.add_user_message(user_query)
+
+
+
+
+        # Enable automatic function calling
+
+
+        execution_settings = OpenAIChatPromptExecutionSettings(
+
+
+            function_choice_behavior=FunctionChoiceBehavior.Auto()
+
+
+        )
+
+
+
+
+        logger.info(f"💬 User Query: \"{user_query}\"")
+
+        response = await chat_service.get_chat_message_contents(
+            chat_history=chat_history,
+            settings=execution_settings,
+            kernel=kernel
+        )
+
+        agent_response = response[0].content
+        logger.info(f"🤖 Agent Response: \"{agent_response}\"")
+        return agent_response
+
+    except Exception as e:
+        logger.error(f"❌ Error in chat_with_agent: {e}")
+        return f"An error occurred: {e}"
+
+
+async def main():
+    """Main function to demonstrate the kernel setup and agent functionality"""
     try:
         logger.info("=" * 60)
         logger.info("🎯 Starting Semantic Kernel Demo")
         logger.info("=" * 60)
         logger.info("📁 Loading environment variables from .env file...")
-        
+
         # Create the kernel
         kernel = create_kernel()
         
-        # List available plugins and functions
+        # List available plugins and functions (original output)
         logger.info("📋 Available plugins and functions:")
         for plugin_name, plugin in kernel.plugins.items():
             logger.info(f"  🔌 Plugin: {plugin_name}")
             for function_name, function in plugin.functions.items():
                 logger.info(f"    ⚙️  Function: {function_name}")
         
+        # Run a single agent query
+        await chat_with_agent(kernel, "What is the status of order ORD-001?")
+
         logger.info("=" * 60)
         logger.info("✅ Demo completed successfully!")
         logger.info("=" * 60)
@@ -116,5 +184,9 @@ def main():
         sys.exit(1)
 
 
+
+
 if __name__ == "__main__":
-    main()
+
+
+    asyncio.run(main())
