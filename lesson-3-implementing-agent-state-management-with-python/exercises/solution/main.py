@@ -386,22 +386,18 @@ async def update_agent_state(state: AgentState, response_data: Dict[str, Any], u
                     state.add_tool_call(tool)
         
         # Determine next phase
-        next_phase = response_data.get("next_phase", None)
-        if next_phase:
+        next_phase_str = response_data.get("next_phase", None)
+        if next_phase_str:
             try:
-                # Try to set specific phase
                 phase_map = {p.value: p for p in Phase}
-                if next_phase in phase_map:
-                    state.transition_to(phase_map[next_phase], trigger=f"llm_suggested_{next_phase}")
-                else:
-                    # Advance to next phase if suggestion is invalid
-                    state.advance(trigger="invalid_phase_suggestion")
-            except:
-                # Fallback to advancing phase
-                state.advance(trigger="error_fallback")
-        else:
-            # Auto-advance based on current state
-            advance_state_automatically(state, response_data)
+                state.transition_to(phase_map[next_phase_str], trigger=f"llm_suggested_{next_phase_str}")
+                return # Prevent auto-advancing
+            except KeyError:
+                # If LLM's suggestion is invalid, fall through to auto-advance
+                pass
+        
+        # Auto-advance based on current state
+        advance_state_automatically(state, response_data)
         
         logger.info(f"✅ State updated - New phase: {state.phase.value}")
         

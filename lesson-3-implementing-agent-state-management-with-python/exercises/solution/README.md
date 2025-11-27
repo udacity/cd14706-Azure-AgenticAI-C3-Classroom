@@ -1,7 +1,5 @@
 # Exercise Solution: Agent State Management with State Machine
 
-[VIDEO_PLACEHOLDER: Agent State Machine for Customer Support]
-
 ### **Solution Walkthrough**
 
 This solution implements a state machine where the agent progresses through phases (Init → Clarify → PlanTools → ExecuteTools → AnalyzeResults → ResolveIssues → ProduceStructuredOutput → Done). The prompt is state-aware to drive targeted behavior.
@@ -55,8 +53,6 @@ if "product_id" in state.requirements:
 ```
 ✅ Scenario completed — Agent reached Done state
 ```
-
-[IMAGE_PLACEHOLDER: Screengrab of logs showing phase transitions and state summary]
 
 ### **State Management Features**
 
