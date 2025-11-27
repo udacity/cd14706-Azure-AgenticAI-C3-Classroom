@@ -68,8 +68,8 @@ class AgenticRAGAgent:
         for attempt in range(self.max_retrieval_attempts):
             logger.info(f"📚 Retrieval attempt {attempt + 1}/{self.max_retrieval_attempts}")
 
-            # Retrieve relevant documents
-            retrieved_docs = await retrieve(query, k=5)
+            # Retrieve relevant documents (filter by ecommerce partition key)
+            retrieved_docs = await retrieve(query, k=5, partition_key="ecommerce")
             response.retrieval_attempts += 1
             response.sources = retrieved_docs
             
@@ -327,13 +327,14 @@ async def test_agentic_rag_queries():
     kernel = create_kernel()
     rag_agent = AgenticRAGAgent(kernel)
     
-    # Mix of queries: policies that work well + one product query showing agentic retry
+    # Mix of queries optimized for semantic vector search
+    # These queries use natural language that aligns with product descriptions
     test_queries = [
-        "Tell me about shipping policies and return policies",
-        "How do I return a product?",
-        "What shipping options are available?",
-        "Show me wireless headphones and their prices",  # Product query - will trigger agentic retry
-        "Can I get extended warranty on electronics?"
+        "I need noise-canceling headphones with long battery life for music",
+        "Looking for mechanical gaming keyboard with RGB lighting",
+        "How do I return an item if I'm not satisfied?",
+        "What are the shipping costs and delivery times?",
+        "Tell me about warranty protection for electronic devices"
     ]
     
     for i, query in enumerate(test_queries, 1):
@@ -406,17 +407,17 @@ async def test_cosmos_db_operations():
         # Test reading from Cosmos DB
         logger.info("\n📖 Testing data retrieval...")
         
-        # Test different queries - simple keywords like demo
+        # Test different queries - specific product searches
         test_queries = [
             "gaming keyboard",
-            "wireless mouse",
-            "office chair",
-            "headphones"
+            "wireless headphones",
+            "ergonomic office chair",
+            "fitness watch"
         ]
         
         for query in test_queries:
             logger.info(f"    Query: '{query}'")
-            results = await retrieve(query, k=3)
+            results = await retrieve(query, k=3, partition_key="ecommerce")
 
             if results:
                 logger.info(f"    Found {len(results)} results:")

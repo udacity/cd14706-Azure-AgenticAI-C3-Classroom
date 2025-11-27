@@ -129,35 +129,38 @@ async def retrieve_with_vector_search(query: str, k: int = 5, partition_key: str
 
         # Build query with optional partition key filter
         # The third parameter to VectorDistance is the distance metric: false = cosine, true = euclidean
+        # Note: We retrieve ALL results and sort in Python because ORDER BY with VectorDistance
+        # causes BadRequest error with some Cosmos DB SDK versions
         if partition_key:
             sql = """
-            SELECT TOP @k c.id, c.text, c.pk,
+            SELECT c.id, c.text, c.pk,
                    VectorDistance(c.embedding, @queryVector, false) as distance
             FROM c
             WHERE IS_DEFINED(c.embedding) AND IS_ARRAY(c.embedding) AND c.pk = @pk
-            ORDER BY VectorDistance(c.embedding, @queryVector, false)
             """
             params = [
-                {"name": "@k", "value": int(k)},
                 {"name": "@queryVector", "value": [float(x) for x in query_vector]},
                 {"name": "@pk", "value": partition_key}
             ]
         else:
             sql = """
-            SELECT TOP @k c.id, c.text, c.pk,
+            SELECT c.id, c.text, c.pk,
                    VectorDistance(c.embedding, @queryVector, false) as distance
             FROM c
             WHERE IS_DEFINED(c.embedding) AND IS_ARRAY(c.embedding)
-            ORDER BY VectorDistance(c.embedding, @queryVector, false)
             """
             params = [
-                {"name": "@k", "value": int(k)},
                 {"name": "@queryVector", "value": [float(x) for x in query_vector]}
             ]
 
         logger.debug(f"Executing vector search with {len(query_vector)}-dimensional vector")
-        results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
-        logger.info(f"✅ Vector search returned {len(results)} results")
+        all_results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
+
+        # Sort by distance (lower is better for cosine distance) and take top k
+        sorted_results = sorted(all_results, key=lambda x: x.get('distance', float('inf')))
+        results = sorted_results[:k]
+
+        logger.info(f"✅ Vector search returned {len(results)} results (from {len(all_results)} total)")
         return results
         
     except Exception as e:

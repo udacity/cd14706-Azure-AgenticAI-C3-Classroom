@@ -37,11 +37,22 @@ async def embed_texts(texts):
     embeddings = []
     for text in texts:
         result = await embedding_service.generate_embeddings(text)
-        # Convert ndarray to list for JSON serialization
+        # Convert to list of floats - handle different return types
         if hasattr(result, 'tolist'):
-            embeddings.append(result.tolist())
+            embedding_list = result.tolist()
+        elif isinstance(result, list):
+            embedding_list = result
         else:
-            embeddings.append(list(result))
+            embedding_list = list(result)
+
+        # Flatten nested lists if needed and ensure all values are floats
+        if embedding_list and isinstance(embedding_list[0], (list, tuple)):
+            # If first element is a list/tuple, flatten it - use the first nested list
+            embedding_list = embedding_list[0]
+
+        # Ensure all values are floats
+        embedding_list = [float(x) for x in embedding_list]
+        embeddings.append(embedding_list)
     return embeddings
 
 async def delete_all_items(partition_key: str):
