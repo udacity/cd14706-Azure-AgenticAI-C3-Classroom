@@ -129,20 +129,17 @@ async def retrieve_with_vector_search(query: str, k: int = 5, partition_key: str
         # - Filter: WHERE IS_DEFINED(c.embedding) AND IS_ARRAY(c.embedding)
         # - If partition_key is provided, add: AND c.pk = @pk
         # - Order by similarity (lower distance = more similar)
-        sql = # TODO: Implement vector similarity search
-
-        # Ensure query_vector is a proper list of floats
-        # Cosmos DB expects vector parameters as arrays
         query_vector_clean = [float(x) for x in query_vector]
 
-        # Build parameters - include partition key if provided
         if partition_key:
+            sql = "SELECT TOP @k c.id, c.text, c.pk, VectorDistance(c.embedding, @queryVector, false) AS similarity FROM c WHERE IS_DEFINED(c.embedding) AND IS_ARRAY(c.embedding) AND c.pk = @pk ORDER BY similarity ASC"
             params = [
                 {"name": "@k", "value": int(k)},
                 {"name": "@queryVector", "value": query_vector_clean},
                 {"name": "@pk", "value": partition_key}
             ]
         else:
+            sql = "SELECT TOP @k c.id, c.text, c.pk, VectorDistance(c.embedding, @queryVector, false) AS similarity FROM c WHERE IS_DEFINED(c.embedding) AND IS_ARRAY(c.embedding) ORDER BY similarity ASC"
             params = [
                 {"name": "@k", "value": int(k)},
                 {"name": "@queryVector", "value": query_vector_clean}
@@ -168,10 +165,10 @@ async def retrieve_with_text_search(query: str, k: int = 5, partition_key: str =
 
         # Build query with optional partition key filter
         if partition_key:
-            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.text, @query, true) AND c.pk = @pk"
+            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.keywords, @query, true) AND c.pk = @pk"
             params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}, {"name": "@pk", "value": partition_key}]
         else:
-            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.text, @query, true)"
+            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.keywords, @query, true)"
             params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}]
 
         results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))

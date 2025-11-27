@@ -1,96 +1,67 @@
-# Exercise Solution - Agentic RAG with E-commerce Data
+# Exercise Solution - Advanced Agentic RAG with E-commerce Data
 
 [VIDEO_PLACEHOLDER: Agentic RAG with Cosmos DB]
 
-## **Data Setup**
+## **What This Solution Demonstrates**
 
-This exercise uses e-commerce data. You have two options:
+This solution implements a production-ready agentic RAG system with several key architectural patterns:
 
-**Option 1: Shared Container (Simpler)**
-- Use your existing `sports_docs` container from previous lessons
-- Ecommerce data will be stored with `pk="ecommerce"` for organization
-- No `.env` changes needed
+1.  **Optimized Vector Search:** Uses Cosmos DB's `ORDER BY VectorDistance` for efficient server-side sorting of vector search results. This leverages the database's native capabilities rather than sorting in application code.
 
-**Option 2: Separate Container (Recommended for Isolation)**
-- Create a dedicated container for ecommerce data
-- Update `.env`: `COSMOS_CONTAINER=ecommerce-container`
-- Better isolation and cleaner testing
+2.  **Advanced Hybrid Retrieval:** Combines vector search (semantic understanding) and text search (keyword precision) using **Reciprocal Rank Fusion (RRF)**. Both searches run in parallel via `asyncio.gather()`, and results are merged intelligently to surface the most relevant documents.
 
-Most students can use **Option 1** (shared container).
+3.  **Keywords Field Pattern:** Demonstrates extracting searchable keywords from verbose text during ingestion. The `keywords` field (extracted from text before the first colon) enables efficient `CONTAINS()` queries without searching through entire product descriptions.
+
+4.  **Confidence Calibration with Structured Prompts:** Shows how to guide LLM assessments with explicit scoring rubrics (0.8-1.0 for highly relevant, 0.6-0.79 for relevant with gaps, etc.). Uses 500-character snippets to provide sufficient context while managing token usage.
+
+5.  **Separation of Concerns:** Follows clean architecture principles by separating data ingestion (`rag/ingest.py`) from orchestration logic (`main.py`), making the codebase maintainable and testable.
 
 ---
 
 ### **Solution Walkthrough**
 
-We implement an autonomous RAG agent that evaluates retrieval quality and refines the query before answering. The loop attempts retrieval up to a threshold.
+The core of the solution remains an autonomous RAG agent that evaluates retrieval quality and can refine its query. However, the retrieval step is now much more powerful.
 
 ```python
-# Retrieval loop with quality assessment (excerpt)
-for attempt in range(self.max_retrieval_attempts):
-    retrieved_docs = await retrieve(query, k=5)
-    qa = await self._assess_retrieval_quality(query, retrieved_docs)
-    if qa["confidence"] >= self.confidence_threshold:
-        break
-    query = await self._refine_query(query, retrieved_docs, qa["issues"])
+# The agent's retrieval call now uses the advanced hybrid search by default
+retrieved_docs = await retrieve(query, k=5, partition_key="ecommerce")
 ```
 
-Quality is judged via an LLM call that returns a JSON payload we parse and trust only if it's valid JSON; otherwise we fall back safely.
+The hybrid search function in `rag/retriever.py` runs both vector and text searches concurrently and intelligently re-ranks the results.
 
 ```python
-# Use ChatCompletionService directly
-chat_service = self.kernel.get_service(type=ChatCompletionClientBase)
-chat_history = ChatHistory()
-chat_history.add_user_message(assessment_prompt)
+# Hybrid search runs both retrieval methods in parallel
+vector_results_task = retrieve_with_vector_search(query, k, partition_key)
+text_results_task = retrieve_with_text_search(query, k, partition_key)
+vector_results, text_results = await asyncio.gather(vector_results_task, text_results_task)
 
-settings = OpenAIChatPromptExecutionSettings(temperature=0.1, max_tokens=500)
-response = await chat_service.get_chat_message_contents(
-    chat_history=chat_history,
-    settings=settings,
-    kernel=self.kernel
-)
-assessment_text = response[0].content.strip()
-
-# Parse JSON response
-json_start = assessment_text.find('{')
-json_end = assessment_text.rfind('}') + 1
-if json_start != -1 and json_end > json_start:
-    json_str = assessment_text[json_start:json_end]
-    assessment = json.loads(json_str)
-else:
-    assessment = {"confidence": 0.5, "reasoning": "Unable to assess", "issues": []}
+# Reciprocal Rank Fusion (RRF) combines the results
+reranked_results = rerank_results([vector_results, text_results], k)
 ```
 
-We then synthesize an answer from the retrieved snippets, citing context where relevant.
+The data ingestion has been centralized in `rag/ingest.py`, and `main.py` now simply calls the function to populate the database, making the code cleaner.
 
 ```python
-# Prepare context from retrieved documents
-context = "\n\n".join([
-    f"Document {i+1} (ID: {doc.get('id', 'unknown')}):\n{doc.get('text', '')}"
-    for i, doc in enumerate(retrieved_docs)
-])
+# In main.py, we now import and call the data ingestion function
+from rag.ingest import delete_all_items, upsert_all_ecommerce_data
 
-# Generate answer using ChatCompletionService
-chat_service = self.kernel.get_service(type=ChatCompletionClientBase)
-chat_history = ChatHistory()
-chat_history.add_user_message(answer_prompt)
+# Clean up old data
+await delete_all_items("ecommerce")
 
-settings = OpenAIChatPromptExecutionSettings(temperature=0.7, max_tokens=1000)
-response = await chat_service.get_chat_message_contents(
-    chat_history=chat_history,
-    settings=settings,
-    kernel=self.kernel
-)
-answer = response[0].content.strip()
+# Upsert all ecommerce data from the ingest module
+await upsert_all_ecommerce_data()
 ```
 
+The agent's assessment loop and final answer generation remain the same, but they now benefit from the higher-quality, re-ranked documents provided by the improved retrieval strategy.
+
 ```
-🔄 Retrieval attempts and confidence are logged for each query
+🔄 Retrieval attempts and confidence are logged, now powered by a superior hybrid search.
 ```
 
 [IMAGE_PLACEHOLDER: Screengrab of logs showing retrieval attempts, confidence, and sources]
 
 ### **Key Takeaway**
 
-> The solution adds an agentic RAG loop that assesses retrieval quality, refines queries as needed, and then generates grounded answers.
+> This solution showcases an advanced, production-ready RAG agent. It uses an efficient hybrid retrieval strategy with re-ranking and follows best practices for code structure by separating data ingestion logic from the main application flow.
 
 [INSTRUCTIONS FOR ACCESSING THE SOLUTION ENVIRONMENT]

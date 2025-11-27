@@ -72,7 +72,7 @@ class AgenticRAGAgent:
         for attempt in range(self.max_retrieval_attempts):
             logger.info(f"Retrieval attempt {attempt + 1}/{self.max_retrieval_attempts}")
             
-            retrieved_docs = await retrieve(query, k=5)
+            retrieved_docs = await retrieve(query, k=5, partition_key="sports")
             response.retrieval_attempts += 1
             response.sources = retrieved_docs
             
@@ -106,17 +106,27 @@ class AgenticRAGAgent:
         try:
             assessment_prompt = f"""
             Assess the quality of retrieved documents for answering this query: "{query}"
-            
-            Retrieved documents:
-            {json.dumps([{"id": doc.get("id", ""), "text": doc.get("text", "")[:200]} for doc in retrieved_docs], indent=2)}
-            
+
+            Retrieved documents (showing first 500 chars, but full documents contain complete information):
+            {json.dumps([{"id": doc.get("id", ""), "text": doc.get("text", "")[:500]} for doc in retrieved_docs], indent=2)}
+
             Rate the retrieval quality on a scale of 0.0 to 1.0 and provide reasoning.
             Consider:
-            1. Relevance to the query
-            2. Completeness of information
-            3. Quality of content
-            4. Whether additional information might be needed
-            
+            1. Relevance to the query - do the documents discuss the right topic?
+            2. Likely completeness - even if snippets are truncated, does the content seem comprehensive?
+            3. Quality of content - is the information factual and detailed?
+            4. Coverage - are multiple relevant documents present?
+
+            IMPORTANT SCORING GUIDANCE:
+            - 0.8-1.0: Highly relevant documents that clearly address the query
+            - 0.6-0.79: Relevant documents with most needed info, minor gaps acceptable
+            - 0.4-0.59: Some relevance but missing key information
+            - 0.2-0.39: Low relevance, significant information gaps
+            - 0.0-0.19: Documents don't address the query
+
+            Note: You're seeing 500-char previews. If documents are clearly relevant and contain
+            detailed information about the query topic, rate highly even if you don't see everything.
+
             Respond in JSON format:
             {{
                 "confidence": 0.85,
@@ -340,29 +350,23 @@ async def test_agentic_rag_queries():
             logger.error(f"Query {i} failed: {e}")
 
 
+from rag.ingest import upsert_all_sports_data, delete_all_items
+
 async def test_cosmos_db_operations():
     logger.info("\nTesting Cosmos DB Operations for RAG")
     logger.info("-" * 40)
 
     try:
+        # Clean up any stale data from previous runs
+        logger.info("Cleaning up stale data from previous runs...")
+        deleted_count = await delete_all_items("sports")
+        if deleted_count > 0:
+            logger.info(f"    Removed {deleted_count} stale items")
+        else:
+            logger.info("    No stale items found")
+
         logger.info("Testing data upserting...")
-        
-        test_sports_data = [
-            ("sports-lakers-001", "Los Angeles Lakers: NBA team, current record 15-10. Key players: LeBron James, Anthony Davis. Recent performance: Won 3 of last 5 games. Next game: vs Warriors."),
-            ("sports-lebron-001", "LeBron James: Lakers forward, 39 years old. Season stats: 25.2 PPG, 7.8 RPG, 6.8 APG. Recent form: Excellent. Injury status: Healthy."),
-            ("sports-warriors-001", "Golden State Warriors: NBA team, current record 12-13. Key players: Stephen Curry, Klay Thompson. Recent performance: Lost 4 of last 5 games."),
-            ("sports-nba-news-001", "NBA Trade Rumors: Lakers looking for shooting help, Warriors considering roster changes. Recent trades: None significant. Free agency: Several role players available."),
-            ("sports-standings-001", "NBA Western Conference Standings: Lakers 15-10 (5th place), Warriors 12-13 (9th place). Top teams: Timberwolves 18-7, Thunder 17-8."),
-            ("sports-anthony-davis-001", "Anthony Davis: Lakers center, 31 years old. Season stats: 24.8 PPG, 12.1 RPG, 2.4 BPG. Recent form: Strong. Injury status: Healthy."),
-            ("sports-curry-001", "Stephen Curry: Warriors guard, 35 years old. Season stats: 28.5 PPG, 4.8 RPG, 5.2 APG. Recent form: Good. Injury status: Healthy."),
-            ("sports-nba-schedule-001", "Upcoming NBA games: Lakers vs Warriors (Dec 25), Celtics vs Heat (Dec 26), Nuggets vs Suns (Dec 27). All games at 8:00 PM ET.")
-        ]
-        
-        for data_id, data_text in test_sports_data:
-            await upsert_snippet(data_id, data_text, pk="sports")
-            logger.info(f"   Upserted: {data_id}")
-        
-        logger.info("All test sports data upserted successfully!")
+        await upsert_all_sports_data()
         
         logger.info("\nTesting data retrieval...")
         
@@ -375,7 +379,7 @@ async def test_cosmos_db_operations():
         
         for query in test_queries:
             logger.info(f"   Query: '{query}'")
-            results = await retrieve(query, k=3)
+            results = await retrieve(query, k=3, partition_key='sports')
             
             if results:
                 logger.info(f"   Found {len(results)} results:")

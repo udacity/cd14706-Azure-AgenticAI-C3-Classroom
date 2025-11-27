@@ -30,6 +30,8 @@ By completing this exercise, you will:
 4. **Multi-attempt retrieval** - Implement retry logic with refined queries
 5. **Answer synthesis** - Generate grounded answers citing retrieved documents
 
+**Note:** This starter code demonstrates production patterns like the `keywords` field for efficient text search and structured prompts for confidence calibration. Focus on implementing the core agentic logic in the TODOs.
+
 ---
 
 ## **Prerequisites**

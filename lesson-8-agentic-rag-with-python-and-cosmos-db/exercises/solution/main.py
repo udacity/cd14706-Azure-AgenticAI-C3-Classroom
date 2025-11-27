@@ -12,7 +12,7 @@ from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureText
 from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
 from semantic_kernel.contents import ChatHistory
 from models import RAGResponse, RAGQuery
-from rag.ingest import upsert_snippet, embed_texts
+from rag.ingest import upsert_snippet, upsert_all_ecommerce_data
 from rag.retriever import retrieve
 
 load_dotenv()
@@ -108,17 +108,27 @@ class AgenticRAGAgent:
             # Create assessment prompt
             assessment_prompt = f"""
             Assess the quality of retrieved documents for answering this query: "{query}"
-            
-            Retrieved documents:
-            {json.dumps([{"id": doc.get("id", ""), "text": doc.get("text", "")[:200]} for doc in retrieved_docs], indent=2)}
-            
+
+            Retrieved documents (showing first 500 chars, but full documents contain complete information):
+            {json.dumps([{"id": doc.get("id", ""), "text": doc.get("text", "")[:500]} for doc in retrieved_docs], indent=2)}
+
             Rate the retrieval quality on a scale of 0.0 to 1.0 and provide reasoning.
             Consider:
-            1. Relevance to the query
-            2. Completeness of information
-            3. Quality of content
-            4. Whether additional information might be needed
-            
+            1. Relevance to the query - do the documents discuss the right topic?
+            2. Likely completeness - even if snippets are truncated, does the content seem comprehensive?
+            3. Quality of content - is the information factual and detailed?
+            4. Coverage - are multiple relevant documents present?
+
+            IMPORTANT SCORING GUIDANCE:
+            - 0.8-1.0: Highly relevant documents that clearly address the query
+            - 0.6-0.79: Relevant documents with most needed info, minor gaps acceptable
+            - 0.4-0.59: Some relevance but missing key information
+            - 0.2-0.39: Low relevance, significant information gaps
+            - 0.0-0.19: Documents don't address the query
+
+            Note: You're seeing 500-char previews. If documents are clearly relevant and contain
+            detailed information about the query topic, rate highly even if you don't see everything.
+
             Respond in JSON format:
             {{
                 "confidence": 0.85,
@@ -327,14 +337,13 @@ async def test_agentic_rag_queries():
     kernel = create_kernel()
     rag_agent = AgenticRAGAgent(kernel)
     
-    # Mix of queries optimized for semantic vector search
-    # These queries use natural language that aligns with product descriptions
+    # Test queries that should demonstrate different behaviors
     test_queries = [
-        "I need noise-canceling headphones with long battery life for music",
-        "Looking for mechanical gaming keyboard with RGB lighting",
-        "How do I return an item if I'm not satisfied?",
-        "What are the shipping costs and delivery times?",
-        "Tell me about warranty protection for electronic devices"
+        "What wireless headphones are available and what are their prices?",
+        "Tell me about shipping policies and return policies",
+        "What are the warranty terms for electronics?",
+        "Show me information about fitness and sports products",
+        "What office supplies do you have in stock?"
     ]
     
     for i, query in enumerate(test_queries, 1):
@@ -381,28 +390,8 @@ async def test_cosmos_db_operations():
         # Test upserting ecommerce data
         logger.info("\n📝 Testing data upserting...")
         
-        # Upsert sample ecommerce products
-        test_products = [
-            ("product-001", "PRODUCT: Wireless Bluetooth Headphones - Premium over-ear headphones perfect for music lovers and travelers. Active noise-canceling technology blocks ambient sound. 30-hour battery life for extended listening sessions. Price: $199.99. Category: Electronics/Audio. In stock: 45 units. Brand: AudioTech. Bluetooth 5.0 connectivity, quick charge feature gets you 5 hours in 10 minutes. Comfortable memory foam ear cushions."),
-            ("product-002", "PRODUCT: Smart Fitness Watch - Advanced wearable fitness tracker for athletes and health enthusiasts. Continuous heart rate monitoring with GPS tracking for outdoor activities. Price: $149.99. Category: Wearables/Fitness. In stock: 23 units. Brand: FitTrack. Sleep tracking, 7-day battery life, 50-meter water resistance for swimming. Compatible with iOS and Android smartphones."),
-            ("product-003", "PRODUCT: Organic Coffee Beans - Premium single-origin Ethiopian coffee from high-altitude farms. Medium roast brings out fruity and floral notes with bright acidity. Price: $24.99. Category: Food & Beverage/Coffee. In stock: 67 units. Brand: Artisan Roast. 12oz whole bean bag, fair trade certified, roasted fresh weekly. Perfect for pour-over, French press, or espresso."),
-            ("product-004", "PRODUCT: Laptop Stand - Adjustable aluminum stand for MacBook, Dell, HP and other laptops. Creates ergonomic workspace setup to reduce neck strain. Price: $39.99. Category: Office Supplies/Desk Accessories. In stock: 12 units. Brand: ErgoDesk. Height adjustable, foldable portable design, fits 13-17 inch laptops. Non-slip silicone pads protect your device."),
-            ("product-005", "PRODUCT: Yoga Mat - Professional-grade non-slip yoga mat for home workouts and studio practice. Premium cushioning provides joint protection during poses. Price: $49.99. Category: Sports & Fitness/Yoga Equipment. In stock: 34 units. Brand: ZenFlow. 72x24 inches, 6mm thickness, TPE eco-friendly material. Includes carrying strap and alignment guides."),
-            ("product-006", "PRODUCT: Gaming Keyboard - Mechanical gaming keyboard designed for competitive esports and PC gamers. Cherry MX Red switches provide fast linear response. RGB backlit keys with customizable lighting effects. Price: $129.99. Category: Electronics/Gaming Peripherals. In stock: 28 units. Brand: GameTech Pro. Programmable macro keys, detachable wrist rest, USB passthrough port, anti-ghosting technology. Compatible with Windows and Mac."),
-            ("product-007", "PRODUCT: Wireless Mouse - High-precision wireless gaming mouse for FPS and MOBA games. 16000 DPI optical sensor with adjustable sensitivity on the fly. Price: $79.99. Category: Electronics/Gaming Peripherals. In stock: 52 units. Brand: GameTech Pro. Rechargeable lithium battery lasts 70 hours, 6 programmable buttons, RGB lighting effects, ergonomic right-hand design. Works with PC and laptop computers."),
-            ("product-008", "PRODUCT: Office Chair - Premium ergonomic mesh office chair designed for all-day comfort and productivity. Lumbar support system adjusts to your spine curvature. Price: $249.99. Category: Office Supplies/Office Furniture. In stock: 15 units. Brand: ErgoDesk. Adjustable seat height and armrests, 360-degree swivel, supports up to 300lbs. 5-year manufacturer warranty. Suitable for home office and corporate workspace."),
-            ("product-009", "PRODUCT: Running Shoes - Lightweight performance running shoes for marathon training and daily runs. Cushioned EVA midsole absorbs impact for joint protection. Price: $89.99. Category: Sports & Fitness/Athletic Footwear. In stock: 41 units. Brand: RunFast. Available in sizes 6-12 for men and women. Breathable mesh upper, shock absorption, reflective details for night running. Ideal for road running and treadmill workouts."),
-            ("product-010", "PRODUCT: Wireless Earbuds - True wireless Bluetooth earbuds with active noise cancellation for immersive audio. Compact design fits comfortably in ears during workouts and commutes. Price: $119.99. Category: Electronics/Audio. In stock: 38 units. Brand: AudioTech. 8-hour battery per charge plus 24 hours with charging case, touch controls, IPX5 sweat and water resistance. Perfect for music, podcasts, and calls."),
-            ("shipping-info", "SHIPPING INFORMATION: Free standard shipping available on all orders over $50. Standard delivery takes 3-5 business days via USPS or UPS. Express shipping option delivers in 1-2 business days for additional $9.99 fee. International shipping available to Canada and Mexico. Same-day delivery available in select metropolitan cities for $19.99 premium fee."),
-            ("return-policy", "RETURN POLICY: We offer a generous 30-day return policy on all products purchased from our store. Items must be returned in original condition with all tags attached and original packaging. Free return shipping labels provided for your convenience. Refunds processed within 5-7 business days after we receive your return. Exchanges available for different sizes or colors of the same product."),
-            ("warranty-info", "WARRANTY INFORMATION: All electronics come with standard 1-year manufacturer warranty covering defects in materials and workmanship. Extended warranty plans available for purchase at checkout. Contact our customer support team to file warranty claims. Warranty does not cover accidental damage or normal wear and tear. Optional accidental damage protection plans available for high-value electronics and appliances.")
-        ]
-        
-        for product_id, product_text in test_products:
-            await upsert_snippet(product_id, product_text, pk="ecommerce")
-            logger.info(f"    Upserted: {product_id}")
-        
-        logger.info(" All test products upserted successfully!")
+        # Upsert all ecommerce data from the ingest module
+        await upsert_all_ecommerce_data()
         
         # Test reading from Cosmos DB
         logger.info("\n📖 Testing data retrieval...")
