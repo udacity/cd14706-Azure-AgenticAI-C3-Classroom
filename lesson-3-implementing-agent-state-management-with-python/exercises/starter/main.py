@@ -479,8 +479,6 @@ def advance_state_automatically(state: AgentState, response_data: Dict[str, Any]
 
 async def execute_tools_for_state(kernel: Kernel, state: AgentState) -> None:
     """Execute tools using LLM automatic tool calling based on current state and requirements"""
-    # TODO: State Management - Use LLM to autonomously decide which tools to call
-    # This replaces hardcoded if/else with FunctionChoiceBehavior.Auto()
     try:
         logger.info(f"🔧 Executing tools with LLM automatic tool calling...")
 
@@ -670,24 +668,6 @@ async def run_state_machine_demo(kernel: Kernel):
                 logger.error(f"❌ Step {step} failed: {e}")
                 state.add_issue(f"Step {step} error: {e}")
 
-        # TODO: Implement auto-progression loop for state management
-        # After user inputs complete, the workflow must continue through remaining phases
-        #
-        # Required: Create a while loop that continues until state.phase == Phase.Done
-        # For each phase, check conditions and advance/transition appropriately:
-        #
-        # - ClarifyRequirements → PlanTools (when data_completeness >= 0.8)
-        # - PlanTools → ExecuteTools (when requirements are ready)
-        # - ExecuteTools: Call execute_tools_for_state() then advance to AnalyzeResults
-        # - AnalyzeResults → ResolveIssues (if has_issues()) OR ProduceStructuredOutput
-        # - ResolveIssues → ProduceStructuredOutput (after resolving issues)
-        # - ProduceStructuredOutput → Done (after creating structured_output)
-        #
-        # IMPORTANT: Use state.advance(trigger="...") or state.transition_to() with descriptive triggers
-        # Add max_auto_steps safety limit (e.g., 10) to prevent infinite loops
-
-        logger.info("\n🔄 Auto-progression loop not yet implemented")
-        logger.info(f"⚠️  Workflow stopped at phase: {state.phase.value}")
         
         # Final state summary
         logger.info(f"\n📊 Final State Summary for Scenario {i}:")

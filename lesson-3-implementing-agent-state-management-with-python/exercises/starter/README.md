@@ -17,8 +17,8 @@ Build a customer service agent with a finite state machine that manages workflow
 ## Code Structure
 
 ```
-├── main.py              # Main implementation (with TODOs)
-├── state.py             # Agent state management (with TODOs)
+├── main.py              # Main implementation (fully implemented)
+├── state.py             # Agent state management (with 2 TODOs for phase descriptions)
 ├── models.py            # Pydantic models for structured outputs
 ├── tools/               # Semantic Kernel tools
 │   ├── order_status.py     # Order status lookup tool
@@ -28,25 +28,13 @@ Build a customer service agent with a finite state machine that manages workflow
 
 ## Tasks
 
-1. **Complete the `Phase` enum** (in `state.py`): Define all 8 phases for the state machine workflow
+Your task is to add phase descriptions in `state.py`:
 
-2. **Implement phase transition tracking** (in `state.py`): Add phase history tracking with timestamps and triggers
+1. **Add Phase descriptions to the `Phase` enum**: Define descriptive comments for all 8 phases (Init, ClarifyRequirements, PlanTools, ExecuteTools, AnalyzeResults, ResolveIssues, ProduceStructuredOutput, Done)
 
-3. **Build state-aware prompt** (in `main.py`): Implement `create_state_aware_prompt(state)` that includes current state information and phase-specific instructions
+2. **Add Phase descriptions to `get_phase_description()` method**: Populate the `descriptions` dictionary with human-readable descriptions for each phase
 
-4. **Handle state transitions** (in `main.py`): Implement `process_state_transition(...)` to invoke LLM with state-aware prompt and parse JSON response
-
-5. **Update agent state** (in `main.py`): Implement `update_agent_state(...)` to:
-   - Set required fields from query_type
-   - Merge requirements, issues, and clarification_questions from state_updates
-   - Record tools_used
-   - Handle next_phase transitions
-
-6. **Implement automatic state progression** (in `main.py`): Implement `advance_state_automatically(...)` to progress through phases based on response data and issues
-
-7. **Execute tools based on state** (in `main.py`): Implement `execute_tools_for_state(...)` to call OrderStatusTools and ProductInfoTools using collected requirements
-
-8. **Run state machine demo** (in `main.py`): Implement `run_state_machine_demo(...)` to iterate through scenarios and process state transitions
+All other functionality (state transitions, tool execution, auto-progression, etc.) is already fully implemented.
 
 ## Example Scenarios
 

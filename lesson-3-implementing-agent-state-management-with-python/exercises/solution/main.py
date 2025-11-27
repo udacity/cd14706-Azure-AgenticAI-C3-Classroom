@@ -32,7 +32,8 @@ from state import AgentState, Phase
 
 # Load environment variables from .env file
 load_dotenv()
-
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('semantic_kernel').setLevel(logging.WARNING)
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,

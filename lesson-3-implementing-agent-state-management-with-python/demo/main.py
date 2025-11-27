@@ -33,6 +33,11 @@ from state import AgentState, Phase
 # Load environment variables from .env file
 load_dotenv()
 
+
+# Suppress verbose logs from specific modules
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('semantic_kernel').setLevel(logging.WARNING)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -441,13 +446,13 @@ async def update_agent_state(state: AgentState, response_data: Dict[str, Any], u
             try:
                 phase_map = {p.value: p for p in Phase}
                 state.transition_to(phase_map[next_phase_str], trigger=f"llm_suggested_{next_phase_str}")
-                state.advance(trigger="invalid_phase_suggestion")
+                return  # Prevent auto-advancing
             except KeyError:
-                # If LLM's suggestion is invalid, fallback to advancing phase automatically
-                state.advance(trigger="error_fallback")
-        else:
-            # Auto-advance based on current state
-            advance_state_automatically(state, response_data)
+                # If LLM's suggestion is invalid, fall through to auto-advance
+                pass
+
+        # Auto-advance based on current state
+        advance_state_automatically(state, response_data)
         
         logger.info(f"✅ State updated - New phase: {state.phase.value}")
         
