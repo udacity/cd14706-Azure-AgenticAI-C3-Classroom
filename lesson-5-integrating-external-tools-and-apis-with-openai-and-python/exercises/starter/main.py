@@ -105,9 +105,10 @@ def create_kernel():
         
         kernel.add_plugin(PricingTools(), "pricing")
         logger.info("✅ PricingTools plugin added successfully")
-
-        # TODO: Register the RecommendationTools plugin with the name "recommendations"
-
+        
+        kernel.add_plugin(RecommendationTools(), "recommendations")
+        logger.info("✅ RecommendationTools plugin added successfully")
+        
         kernel.add_plugin(ReviewTools(), "reviews")
         logger.info("✅ ReviewTools plugin added successfully")
         

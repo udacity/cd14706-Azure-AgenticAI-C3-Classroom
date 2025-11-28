@@ -12,29 +12,21 @@ Implement the rule-based evaluation logic in `eval/judge.py` to validate agent r
 
 In `eval/judge.py`, complete the `evaluate()` function:
 
-1. **Check response validity** (line 42):
-   - Set `valid_json = response is not None`
+1.  **Check response validity** (line 42):
+    *   Determine if the `response` object itself is not `None`.
 
-2. **Check structured data** (line 43):
-   - Set `has_structured_data = hasattr(response, 'structured_data') and response.structured_data is not None`
+2.  **Check structured data** (line 43):
+    *   Verify if the `response` has a `structured_data` attribute and if that attribute is not `None`.
 
-3. **Check tools used** (line 44):
-   - Set `has_tools_used = hasattr(response, 'tools_used') and len(response.tools_used) > 0`
+3.  **Check tools used** (line 44):
+    *   Ascertain if the `response` has a `tools_used` attribute and if the list of `tools_used` is not empty.
 
-4. **Check confidence score** (line 45):
-   - Set `has_confidence_score = hasattr(response, 'confidence_score') and response.confidence_score > 0`
+4.  **Check confidence score** (line 45):
+    *   Confirm if the `response` has a `confidence_score` attribute and if its value is greater than 0.
 
-5. **Return evaluation results** (line 61):
-   - Return a dictionary with all five boolean fields:
-     ```python
-     return {
-         "valid_json": valid_json,
-         "has_structured_data": has_structured_data,
-         "has_tools_used": has_tools_used,
-         "has_confidence_score": has_confidence_score,
-         "appropriate_tools": appropriate_tools
-     }
-     ```
+5.  **Return evaluation results** (line 61):
+    *   Construct a dictionary that includes all five boolean evaluation fields: `valid_json`, `has_structured_data`, `has_tools_used`, `has_confidence_score`, and `appropriate_tools`.
+
 
 ### **Running the Exercise**
 

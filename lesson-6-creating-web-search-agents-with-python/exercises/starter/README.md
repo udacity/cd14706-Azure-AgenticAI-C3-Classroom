@@ -61,7 +61,7 @@ BING_CONNECTION_ID=your-bing-grounding-connection-id
 
 ### Step 1: Review the Working Example
 
-Open `tools/search.py` and examine the `product_web_search` function (lines 16-80). This is a complete, working implementation that shows the pattern you'll follow.
+Open `tools/search.py` and examine the `product_web_search` function. This is a complete, working implementation that shows the pattern you'll follow.
 
 Key elements to notice:
 ```python
@@ -96,7 +96,7 @@ results = json.loads(raw_json)
 
 ### Step 2: Implement Price Comparison Search
 
-Navigate to **line 99-103** in `tools/search.py`. You'll see a TODO comment:
+In `tools/search.py`, find the `price_comparison_search` function. You'll see a TODO comment:
 
 ```python
 client.agents.messages.create(
@@ -116,7 +116,7 @@ client.agents.messages.create(
 
 ### Step 3: Implement Product Review Search
 
-Navigate to **line 156-160** in `tools/search.py`. You'll see another TODO:
+In `tools/search.py`, find the `product_review_search` function. You'll see another TODO:
 
 ```python
 client.agents.messages.create(
@@ -138,20 +138,21 @@ Run the main test file:
 python main.py
 ```
 
-You should see output for all three search functions:
+You should see output for all three search functions, indicating that your implemented search functions are correctly integrated and returning results.
 
+
+## 🧪 Testing Your Implementation
+
+Run the exercise:
+```bash
+python main.py
 ```
-🔎 Testing: Product Web Search
-✅ Returned 3 results
 
-💰 Testing: Price Comparison Search
-✅ Returned 3 results
-
-⭐ Testing: Product Review Search
-✅ Returned 3 results
-
-✅ Ecommerce Web Search Agent testing completed successfully!
-```
+You should see output showing:
+- Product Web Search results
+- Price Comparison Search results
+- Product Review Search results
+- Confirmation that the Ecommerce Web Search Agent testing completed successfully!
 
 You can also run the simple test:
 
@@ -159,20 +160,6 @@ You can also run the simple test:
 python test_search_simple.py
 ```
 
-## 🧪 Expected Results
-
-When your implementation is complete, each search function should return a list of dictionaries with this structure:
-
-```python
-[
-    {
-        "title": "Search result title",
-        "url": "https://example.com",
-        "snippet": "Brief description of the result"
-    },
-    # ... more results ...
-]
-```
 
 ## 🔧 Troubleshooting
 

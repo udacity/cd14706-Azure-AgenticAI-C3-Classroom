@@ -19,40 +19,33 @@ By the end of this exercise, you will:
 
 ## **Instructions**
 
-### Part 1: Enable Automatic Function Calling
+### Part 0: Define Pydantic Models
 
-1. **In `process_customer_query(...)`**, implement automatic function calling:
-   - Create a `ChatHistory` object
-   - Add the system message using `create_customer_service_prompt()`
-   - Add the user message (query)
-   - Get the chat completion service: `kernel.get_service(type=ChatCompletionClientBase)`
-   - Get execution settings from the service
-   - Set `execution_settings.function_choice_behavior = FunctionChoiceBehavior.Auto()`
-   - Call `chat_service.get_chat_message_contents()` with chat history, settings, and kernel
+1.  **In `models.py`**, complete the `OrderStatus` enum by adding common order status values.
+2.  **Still in `models.py`**, complete the `ProductAvailability` enum by adding relevant product availability states.
+3.  **In `models.py`**, define the necessary fields for the `OrderResponse` BaseModel to represent order details.
+4.  **Still in `models.py`**, define the necessary fields for the `ProductResponse` BaseModel to represent product information.
 
-### Part 2: Structured Output Prompt
+### Part 1: Structured Output Prompt
 
-2. **In `create_customer_service_prompt()`**, ensure the prompt clearly instructs the model to return valid JSON matching the provided schemas for `order_status` and `product_info`. The prompt should specify the exact JSON structure expected.
+1.  **In `create_customer_service_prompt()`**, ensure the prompt clearly instructs the model to return valid JSON matching the provided schemas for `order_status` and `product_info`. The prompt should specify the exact JSON structure expected.
 
-### Part 3: Pydantic Validation
+### Part 2: Pydantic Validation
 
-3. **In `parse_and_validate_response(...)`**, extract the JSON substring from `response_text` using the first `{` and last `}`; parse it with `json.loads`.
+2.  **In `parse_and_validate_response(...)`**, extract the JSON substring from `response_text` using the first `{` and last `}`; parse it with `json.loads`.
+3.  **Still in `parse_and_validate_response(...)`**, validate the parsed dictionary by constructing `CustomerServiceResponse(**response_data)`.
 
-4. **Still in `parse_and_validate_response(...)`**, validate the parsed dictionary by constructing `CustomerServiceResponse(**response_data)`.
+### Part 3: Query Processing
 
-5. **If `structured_data` is present**, validate it against the appropriate model by constructing `OrderResponse(**...)` when `query_type == "order_status"` or `ProductResponse(**...)` when `query_type == "product_info"`.
+4.  **In `process_customer_query(...)`**, determine `query_type` heuristically from the user query (e.g., contains "order"/"tracking" → `order_status`; contains "product"/"price" → `product_info`) before calling `parse_and_validate_response`.
 
-### Part 4: Query Processing
+### Part 4: Demo Scenarios
 
-6. **In `process_customer_query(...)`**, determine `query_type` heuristically from the user query (e.g., contains "order"/"tracking" → `order_status`; contains "product"/"price" → `product_info`) before calling `parse_and_validate_response`.
+5.  **In `run_demo_scenarios(...)`**, iterate over the provided demo queries and log: human-readable response, tools used, confidence score, follow-up suggestions, and (if present) the JSON `structured_data`.
 
-### Part 5: Demo Scenarios
+### Part 5: Verify Setup
 
-7. **In `run_demo_scenarios(...)`**, iterate over the provided demo queries and log: human-readable response, tools used, confidence score, follow-up suggestions, and (if present) the JSON `structured_data`.
-
-### Part 6: Verify Setup
-
-8. **Verify the kernel setup**: ensure both `order_status` and `product_info` plugins are registered with `kernel.add_plugin()`.
+6.  **Verify the kernel setup**: ensure both `order_status` and `product_info` plugins are registered with `kernel.add_plugin()`.
 
 ## **Success Criteria**
 

@@ -59,49 +59,70 @@ async def seed_sample_memories(ltm: LongTermMemory):
 
 class AssistantAgent:
     def __init__(self, session_id: str = "assistant_session_default"):
-        # TODO: Step 1 - Initialize the AssistantAgent
-        # Store session_id as self.session_id
-        # Create LongTermMemory instance with:
-        #   max_memories=1000
-        #   importance_threshold=0.3
-        #   enable_ai_scoring=True
-        # Get OpenAI kernel using get_openai_kernel()
-        # Log warning if kernel is None
-        pass
+        self.session_id = session_id
+        self.memory = LongTermMemory(
+            max_memories=1000,
+            importance_threshold=0.3,
+            enable_ai_scoring=True
+        )
+        self.kernel = get_openai_kernel()
+        if self.kernel is None:
+            logger.warning("Kernel could not be initialized. AI-related functionalities will be disabled.")
 
     async def chat(self, query: str) -> str:
-        # TODO: Step 2 - Implement the chat method
-        # 1. Check if kernel is available (return error message if not)
-        # 2. Retrieve relevant memories using self.memory.search_memories()
-        #    - Use self.session_id, query, min_importance=0.0, limit=5
-        # 3. Build memory_context string from retrieved memories
-        #    - Format: "\n\nRelevant past conversations:\n- {content} (importance: {score:.2f})\n"
-        #    - Log number of memories found (or "No relevant memories found")
-        # 4. Create prompt with:
-        #    - System role: "You are a helpful assistant with access to past conversation history and tool results."
-        #    - Memory context
-        #    - User query
-        #    - Instructions to use information from past conversations
-        # 5. Get LLM response:
-        #    - chat_service = self.kernel.get_service(type=ChatCompletionClientBase)
-        #    - Create ChatHistory and add prompt as user message
-        #    - Use OpenAIChatPromptExecutionSettings(temperature=0.7, max_tokens=1000)
-        #    - Call get_chat_message_contents()
-        # 6. Store conversation in memory:
-        #    - User query: memory_type="conversation", importance=0.7
-        #    - Agent response: memory_type="conversation", importance=0.6
-        #    - Use self._extract_tags() for tags
-        # 7. Return the response
-        pass
+        if not self.kernel:
+            return "Error: The AI kernel is not available. Please check your configuration."
+
+        # 1. Retrieve relevant memories
+        # TODO: Retrieve relevant memories using self.memory.search_memories()
+        # Hint: Use self.session_id, the user's query, a min_importance of 0.0, and a limit of 5.
+        retrieved_memories = []
+
+        # 2. Build memory context for the prompt
+        memory_context = "\n\nRelevant past conversations:\n"
+        if retrieved_memories:
+            for mem in retrieved_memories:
+                memory_context += f"- {mem.content} (importance: {mem.importance_score:.2f})\n"
+            logger.info(f"Found {len(retrieved_memories)} relevant memories.")
+        else:
+            memory_context += "- No relevant memories found.\n"
+            logger.info("No relevant memories found.")
+
+        # 3. Create the prompt and get the LLM response
+        prompt = f"""You are a helpful assistant with access to past conversation history and tool results.
+Use the information from past conversations to provide a comprehensive and contextual answer.
+
+{memory_context}
+
+Current user query: {query}
+Answer:"""
+        
+        chat_service = self.kernel.get_service(type=ChatCompletionClientBase)
+        chat_history = ChatHistory(system_message=prompt)
+
+        settings = OpenAIChatPromptExecutionSettings(temperature=0.7, max_tokens=1000)
+        
+        # TODO: Get the agent's response using chat_service.get_chat_message_contents()
+        # Hint: Pass in the chat_history, settings, and kernel.
+        response = "" # Placeholder
+
+        # 4. Store the new conversation in memory
+        tags = self._extract_tags(query)
+        # TODO: Add the user's query to the long-term memory
+        # Hint: Use self.memory.add_memory with the session_id, query, "conversation" type, importance of 0.7, and the extracted tags.
+        
+        # TODO: Add the agent's response to the long-term memory
+        # Hint: Use self.memory.add_memory with the session_id, response, "conversation" type, importance of 0.6, and tags.
+
+        return response
 
     def _extract_tags(self, text: str) -> list:
-        # TODO: Step 3 - Implement tag extraction
-        # Convert text to lowercase
-        # Check for keywords: ["order", "product", "customer", "ORD-", "PROD-",
-        #                       "shipping", "tracking", "inventory", "stock",
-        #                       "price", "review", "rating", "delivery", "item", "purchase"]
-        # Return list of found keywords, or ["customer"] if none found
-        pass
+        text_lower = text.lower()
+        keywords = ["order", "product", "customer", "ord-", "prod-",
+                    "shipping", "tracking", "inventory", "stock",
+                    "price", "review", "rating", "delivery", "item", "purchase"]
+        found_tags = [kw for kw in keywords if kw in text_lower]
+        return found_tags if found_tags else ["customer"]
 
 
 async def run_demo():

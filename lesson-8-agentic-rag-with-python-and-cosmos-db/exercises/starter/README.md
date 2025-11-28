@@ -58,57 +58,54 @@ This creates:
 - Policy documents (shipping-info, return-policy, warranty-info)
 - Product catalog (wireless headphones, gaming laptop, smart watch, etc.)
 
-### **Part 2: Implement AgenticRAG Class**
+### **Part 2: Implement AgenticRAGAgent Class in `main.py`**
 
-The `AgenticRAG` class in `main.py` has TODO markers for you to implement:
+The `AgenticRAGAgent` class in `main.py` has TODO markers for you to implement:
 
 #### **TODO 1: Implement `_assess_retrieval_quality` method**
 
 **Goal**: Use LLM to evaluate if retrieved documents answer the query well.
 
 **Steps**:
-1. Create an assessment prompt asking the LLM to evaluate retrieval quality
-2. Use ChatCompletionService to get LLM assessment
-3. Parse JSON response with fields: `confidence` (0.0-1.0), `reasoning`, `issues`
-4. Handle JSON parsing errors gracefully with fallback
+1.  Replace the `TODO: Use ChatCompletionService directly (recommended approach)` comment with actual code to get the `ChatCompletionClientBase` service, create a `ChatHistory`, add the user message with the assessment prompt, set `OpenAIChatPromptExecutionSettings`, and call `chat_service.get_chat_message_contents()`.
+2.  Parse JSON response with fields: `confidence` (0.0-1.0), `reasoning`, `issues`.
+3.  Handle JSON parsing errors gracefully with fallback.
 
-**Hint**: Look at the solution README for the ChatCompletionService pattern.
+**Hint**: Look at the working example in `_generate_answer` for the ChatCompletionService pattern.
 
 #### **TODO 2: Implement `_refine_query` method**
 
 **Goal**: Use LLM to improve the query based on retrieval issues.
 
 **Steps**:
-1. Create a refinement prompt with original query, retrieved docs, and issues
-2. Use ChatCompletionService to get refined query
-3. Extract refined query from LLM response
-4. Fall back to original query if refinement fails
+1.  Replace the `TODO: Use ChatCompletionService directly (recommended approach)` comment with actual code to get the `ChatCompletionClientBase` service, create a `ChatHistory`, add the user message with the refinement prompt, set `OpenAIChatPromptExecutionSettings`, and call `chat_service.get_chat_message_contents()`.
+2.  Extract refined query from LLM response.
+3.  Fall back to original query if refinement fails.
 
 **Hint**: The refined query should be more specific or use different keywords.
 
-#### **TODO 3: Implement the agentic retrieval loop in `answer` method**
+#### **TODO 3: Implement `_generate_answer` method**
+
+**Goal**: Generate an answer using the retrieved documents and LLM.
+
+**Steps**:
+1.  Replace the `TODO: Use ChatCompletionService directly (recommended approach)` comment with actual code to get the `ChatCompletionClientBase` service, create a `ChatHistory`, add the user message with the answer prompt, set `OpenAIChatPromptExecutionSettings`, and call `chat_service.get_chat_message_contents()`.
+2.  Build context string from retrieved documents (with document IDs).
+3.  Return formatted response with answer, confidence, and reasoning.
+
+#### **TODO 4: Implement the agentic retrieval loop in `process_query` method**
 
 **Goal**: Retrieve documents with quality assessment and retry logic.
 
 **Steps**:
-1. Loop up to `max_retrieval_attempts` (default 3)
-2. Retrieve documents using `retrieve()` function
-3. Assess retrieval quality using `_assess_retrieval_quality()`
-4. If confidence >= threshold, break the loop
-5. Otherwise, refine query and try again
-6. After loop, use best retrieved docs for answer synthesis
+1.  Loop up to `self.max_retrieval_attempts` (default 3).
+2.  Retrieve documents using `retrieve()` function.
+3.  Assess retrieval quality using `_assess_retrieval_quality()`.
+4.  If confidence `>= self.confidence_threshold`, break the loop.
+5.  Otherwise, refine query using `_refine_query()` and try again.
+6.  After the loop, use the best retrieved docs for answer synthesis.
 
 **Hint**: Track confidence scores to use the best retrieval attempt.
-
-#### **TODO 4: Implement answer synthesis**
-
-**Goal**: Generate answer using retrieved documents as context.
-
-**Steps**:
-1. Build context string from retrieved documents (with document IDs)
-2. Create answer prompt with context and user query
-3. Use ChatCompletionService to generate answer
-4. Return formatted response with answer, confidence, and reasoning
 
 ---
 

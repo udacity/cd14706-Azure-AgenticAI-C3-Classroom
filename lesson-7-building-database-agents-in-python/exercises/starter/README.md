@@ -59,19 +59,32 @@ To create a separate container:
 
 ### **Instructions**
 
-1. Import the RAG helpers in `main.py`:
-   - `from rag.ingest import upsert_snippet, embed_texts`
-   - `from rag.retriever import retrieve`
+Your task is to complete the helper functions in the `rag` directory and update the `process_customer_query` function in `main.py`.
 
-2. Create an async function `test_cosmos_db_operations()` that:
-   - Upserts several test product texts using `upsert_snippet(product_id, text, pk="ecommerce")`.
-   - For a small list of queries, calls `await retrieve(query, k=3)` and logs each result's `id` and first ~100 characters of `text`.
-   - **Note:** The `pk` parameter is just a field for filtering (e.g., `WHERE c.pk = 'ecommerce'`), not the partition key. The actual partition key is the document's `id` field (as defined by `COSMOS_PARTITION_KEY=/id` in `.env`).
+#### **Part 1: Implement Data Ingestion (`rag/ingest.py`)**
 
-3. In `create_kernel()`, keep the standard Semantic Kernel setup with Azure OpenAI services and register the ecommerce tools as Semantic Kernel plugins (`inventory`, `shipping`, `pricing`, `recommendations`, `reviews`).
+1.  **In `delete_all_items()`:**
+    *   Implement the logic to query and delete all items for a given partition key. This prevents data contamination between test runs.
+    *   **Hint:** Use the query `"SELECT c.id FROM c WHERE c.pk = @pk"` and loop through the results, calling `container.delete_item()` for each.
 
-4. In `main()`, call `asyncio.run(test_cosmos_db_operations())` before the external API tests to validate the database path first.
+2.  **In `upsert_snippet()`:**
+    *   Implement the logic to generate embeddings for the text and upsert the document into Cosmos DB.
+    *   **Hint:** Call `embed_texts()` to get the embeddings, create a dictionary for the document, and use `container.upsert_item()`.
 
-5. Ensure logs clearly separate sections for Cosmos DB, external APIs, and scenarios.
+#### **Part 2: Implement Data Retrieval (`rag/retriever.py`)**
 
-`[INSTRUCTIONS FOR ACCESSING THE EXERCISE ENVIRONMENT]`}
+1.  **In `_execute_query_with_retry()`:**
+    *   Implement a retry loop with exponential backoff to handle potential query plan issues in Cosmos DB.
+    *   **Hint:** Use a `for` loop with `max_retries` and `asyncio.sleep()` for the backoff.
+
+2.  **In `retrieve()`:**
+    *   Build the SQL query for a text-based search using `CONTAINS`.
+    *   Execute the query using the `_execute_query_with_retry` function you just implemented.
+    *   Implement a fallback mechanism to retrieve random documents if the initial search yields no results.
+    *   **Hint:** Remember to add a filter for the `partition_key` if it's provided.
+
+#### **Part 3: Update Agent Logic (`main.py`)**
+
+1.  **In `process_customer_query()`:**
+    *   Replace the temporary `kernel.add_function` and `kernel.invoke` calls with a direct implementation using `ChatCompletionService`.
+    *   **Hint:** Get the `ChatCompletionService` from the kernel, create a `ChatHistory`, add the system prompt and user query, configure `OpenAIChatPromptExecutionSettings` with `FunctionChoiceBehavior.Auto()`, and then call `chat_service.get_chat_message_contents()`.

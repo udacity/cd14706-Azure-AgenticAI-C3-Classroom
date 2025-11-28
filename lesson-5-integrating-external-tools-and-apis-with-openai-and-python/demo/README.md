@@ -1,149 +1,43 @@
-# Sports Analyst Agent with External APIs Demo
+# Lesson 5 Demo: Sports Analyst Agent with External APIs
 
-This demo showcases a sports analyst agent that integrates external APIs using Azure OpenAI and Semantic Kernel.
+This demo showcases a sports analyst agent that integrates with external APIs to provide real-time sports information.
 
-## What This Demo Covers
+## Features
 
-- **Azure OpenAI Integration**: Using Azure OpenAI with Semantic Kernel
-- **External API Integration**: Real sports APIs (NewsAPI.org, Ball Don't Lie API)
-- **Memory Management**: Short-term memory for conversation context
-- **Automatic Tool Calling**: FunctionChoiceBehavior for tool selection
-- **Structured Output**: Pydantic models for validated responses
-- **Error Handling**: Robust error handling with fallbacks
+- **Semantic Kernel Setup**: Configures Semantic Kernel with Azure OpenAI services.
+- **External API Integration**: Connects to the [NewsAPI](https://newsapi.org/) for sports news and the [Ball Don't Lie API](https://balldontlie.io/) for NBA player statistics.
+- **Mock Data Fallback**: Includes mock data for sports scores and team standings, and provides a fallback for the player stats API if it fails.
+- **Structured Output**: Uses Pydantic models to ensure the agent's responses are in a structured JSON format.
 
-## Tools
+## Setup Instructions
 
-### 1. Sports News API (External - NewsAPI.org)
-- Latest sports news by league and team
-- Real-time article aggregation
-- Requires API key
+1.  **Install Dependencies**: Install all the required Python packages.
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-### 2. Player Stats API (External - Ball Don't Lie API)
-- NBA player statistics
-- Fallback to mock data if unavailable
-- No API key required
+2.  **Configure Environment Variables**:
+    -   Copy the `.env.example` file to a new file named `.env`.
+    -   Open the `.env` file and fill in your specific credentials for the following services.
 
-### 3. Sports Scores Tool (Mock)
-- Game scores demonstration
-- Local mock data
+### Required API Keys
 
-### 4. Team Standings Tool (Mock)
-- Team rankings demonstration
-- Local mock data
+This demo requires API keys for two external services to function fully.
 
-### 5. Sports Analytics Tool (Mock)
-- Advanced statistics demonstration
-- Local mock data
+#### NewsAPI (for Sports News)
 
-## Prerequisites
+-   Go to [https://newsapi.org/](https://newsapi.org/) and register for a free developer account.
+-   Once registered, you will find your API key on your account dashboard.
+-   Copy this key into the `.env` file for the `NEWSAPI_KEY` variable.
 
-- Python 3.8 or higher
-- Azure OpenAI Service account
-- Required environment variables (see Setup section)
+#### Ball Don't Lie API (for NBA Player Stats)
 
-## Setup
+-   The `balldontlie` API is used to fetch live NBA player statistics. Without a valid API key, this tool will rely on its internal mock data as a fallback.
+-   Go to [https://balldontlie.io/](https://balldontlie.io/) and sign up for an account.
+-   You can find your API key in your account settings after signing in.
+-   Copy this key into the `.env` file for the `BALLDONTLIE_API_KEY` variable.
 
-### 1. Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Environment Variables
-Create a `.env` file in the demo directory:
-
-```env
-AZURE_OPENAI_ENDPOINT=your_endpoint
-AZURE_OPENAI_API_VERSION=2024-02-15-preview
-AZURE_OPENAI_CHAT_DEPLOYMENT=your_deployment
-AZURE_OPENAI_EMBED_DEPLOYMENT=your_embedding
-AZURE_OPENAI_KEY=your_key
-NEWSAPI_KEY=your_newsapi_key
-BALLDONTLIE_API_KEY=your_balldontlie_key
-```
-
-### 3. Run the Demo
-```bash
-python main.py
-```
-
-## Expected Output
-
-### 1. API Testing
-- Sports News API test
-- Player Stats API test
-
-### 2. Demo Scenarios
-**Scenario 1: Game Scores Query**
-- Game scores lookup
-- Team news retrieval
-- Standings display
-- Multi-turn conversation
-
-**Scenario 2: Player Stats**
-- Player statistics
-- Player news
-- Performance analytics
-- Context-aware responses
-
-**Scenario 3: Comprehensive Analysis**
-- Team analysis
-- News, standings, analytics
-- Memory-based follow-ups
-
-## Code Structure
-
-```
-demo/
-├── main.py                    # Main demo
-├── memory.py                  # Short-term memory
-├── models.py                  # Pydantic models
-├── requirements.txt           # Dependencies
-├── README.md                  # Documentation
-└── tools/
-    ├── sports_news.py         # NewsAPI.org integration
-    ├── player_stats.py        # Ball Don't Lie API
-    ├── sports_scores.py       # Mock scores
-    ├── team_standings.py      # Mock standings
-    └── sports_analytics.py    # Mock analytics
-```
-
-## Key Learning Points
-
-- External API integration with Semantic Kernel
-- Automatic tool calling with FunctionChoiceBehavior
-- Memory management for context
-- Pydantic models for validation
-- Error handling and fallbacks
-- Structured JSON output
-
-## Usage Examples
-
-### Game Scores Query
-```
-User: "I want to check the Lakers game scores"
-Agent: [Uses sports_scores tool]
-User: "Can you get the latest news about these teams?"
-Agent: [Calls NewsAPI.org]
-```
-
-### Player Stats Query
-```
-User: "I want to know about LeBron James' stats"
-Agent: [Calls Ball Don't Lie API]
-User: "Can you get recent news about these players?"
-Agent: [Calls NewsAPI.org]
-```
-
-## Error Handling
-
-- API failures with fallbacks
-- Network timeout handling
-- Pydantic validation errors
-- Memory management
-
-## Troubleshooting
-
-1. Set all environment variables in `.env`
-2. Verify Azure OpenAI API keys
-3. Check internet connection for external APIs
-4. Enable debug logging: `logging.basicConfig(level=logging.DEBUG)`
+3.  **Run the Demo**: Execute the `main.py` script to see the agent in action.
+    ```bash
+    python main.py
+    ```

@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureTextEmbedding, OpenAIChatPromptExecutionSettings
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
 from semantic_kernel.contents import ChatHistory
 from tools.order_status import OrderStatusTools
 from tools.product_info import ProductInfoTools
@@ -36,25 +37,25 @@ logger = logging.getLogger(__name__)
 def create_kernel():
     """Create and configure Semantic Kernel with Azure services and tools"""
     try:
-        logger.info("🚀 Starting Semantic Kernel setup...")
+        logger.info("Starting Semantic Kernel setup...")
         
         # Get Azure configuration
-        logger.info("📋 Retrieving Azure OpenAI configuration from environment variables...")
+        logger.info("Retrieving Azure OpenAI configuration from environment variables...")
         AZURE_OPENAI_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
         AZURE_OPENAI_API_VERSION = os.environ["AZURE_OPENAI_API_VERSION"]
         DEPLOYMENT_CHAT = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]
         DEPLOYMENT_EMBED = os.environ["AZURE_OPENAI_EMBED_DEPLOYMENT"]
         AZURE_OPENAI_KEY = os.environ["AZURE_OPENAI_KEY"]
         
-        logger.info(f"✅ Configuration loaded - Endpoint: {AZURE_OPENAI_ENDPOINT}")
-        logger.info(f"📊 Chat deployment: {DEPLOYMENT_CHAT}, Embedding deployment: {DEPLOYMENT_EMBED}")
+        logger.info(f"Configuration loaded - Endpoint: {AZURE_OPENAI_ENDPOINT}")
+        logger.info(f"Chat deployment: {DEPLOYMENT_CHAT}, Embedding deployment: {DEPLOYMENT_EMBED}")
         
         # Create kernel
-        logger.info("🔧 Creating Semantic Kernel instance...")
+        logger.info("Creating Semantic Kernel instance...")
         kernel = Kernel()
         
         # Add Azure services
-        logger.info("🤖 Adding Azure Chat Completion service...")
+        logger.info("Adding Azure Chat Completion service...")
         kernel.add_service(
             AzureChatCompletion(
                 deployment_name=DEPLOYMENT_CHAT,
@@ -63,9 +64,9 @@ def create_kernel():
                 api_version=AZURE_OPENAI_API_VERSION
             )
         )
-        logger.info("✅ Azure Chat Completion service added successfully")
+        logger.info("Azure Chat Completion service added successfully")
         
-        logger.info("🧠 Adding Azure Text Embedding service...")
+        logger.info("Adding Azure Text Embedding service...")
         kernel.add_service(
             AzureTextEmbedding(
                 deployment_name=DEPLOYMENT_EMBED,
@@ -74,33 +75,33 @@ def create_kernel():
                 api_version=AZURE_OPENAI_API_VERSION
             )
         )
-        logger.info("✅ Azure Text Embedding service added successfully")
+        logger.info("Azure Text Embedding service added successfully")
         
         # Add tools as SK plugins
-        logger.info("🛠️ Adding custom tools as Semantic Kernel plugins...")
+        logger.info("Adding custom tools as Semantic Kernel plugins...")
         kernel.add_plugin(OrderStatusTools(), "order_status")
-        logger.info("✅ OrderStatusTools plugin added successfully")
+        logger.info("OrderStatusTools plugin added successfully")
         
         kernel.add_plugin(ProductInfoTools(), "product_info")
-        logger.info("✅ ProductInfoTools plugin added successfully")
+        logger.info("ProductInfoTools plugin added successfully")
         
         # Add external API tools
         kernel.add_plugin(InventoryTools(), "inventory")
-        logger.info("✅ InventoryTools plugin added successfully")
+        logger.info("InventoryTools plugin added successfully")
         
         kernel.add_plugin(ShippingTools(), "shipping")
-        logger.info("✅ ShippingTools plugin added successfully")
+        logger.info("ShippingTools plugin added successfully")
         
         kernel.add_plugin(PricingTools(), "pricing")
-        logger.info("✅ PricingTools plugin added successfully")
+        logger.info("PricingTools plugin added successfully")
         
         kernel.add_plugin(RecommendationTools(), "recommendations")
-        logger.info("✅ RecommendationTools plugin added successfully")
+        logger.info("RecommendationTools plugin added successfully")
         
         kernel.add_plugin(ReviewTools(), "reviews")
-        logger.info("✅ ReviewTools plugin added successfully")
+        logger.info("ReviewTools plugin added successfully")
         
-        logger.info("🎉 Semantic Kernel setup completed successfully!")
+        logger.info("Semantic Kernel setup completed successfully!")
         return kernel
         
     except KeyError as e:
@@ -386,8 +387,17 @@ async def test_cosmos_db_operations():
     logger.info("-" * 40)
 
     try:
+        # Clean up any stale data from previous runs
+        logger.info("🧹 Cleaning up stale data from previous runs...")
+        from rag.ingest import delete_all_items
+        deleted_count = await delete_all_items("test")
+        if deleted_count > 0:
+            logger.info(f"    Removed {deleted_count} stale items")
+        else:
+            logger.info("    No stale items found")
+        
         # Test upserting ecommerce data
-        logger.info("📝 Testing data upserting...")
+        logger.info("\n📝 Testing data upserting...")
         
         # Upsert sample ecommerce products
         test_products = [
@@ -575,10 +585,10 @@ def main():
         asyncio.run(test_api_integration_scenarios())
         
         logger.info(f"\n{'='*80}")
-        logger.info("✅ Ecommerce Database Agent Testing completed successfully!")
-        logger.info("🎉 All Cosmos DB operations tested and working!")
-        logger.info("🏆 RAG integration with vector search demonstrated!")
-        logger.info("🛒 Ecommerce data retrieval and processing verified!")
+        logger.info(" Ecommerce Database Agent Testing completed successfully!")
+        logger.info(" All Cosmos DB operations tested and working!")
+        logger.info(" RAG integration with text-based search demonstrated! (Vector search in L8)")
+        logger.info(" Ecommerce data retrieval and processing verified!")
         logger.info(f"{'='*80}")
         
     except Exception as e:

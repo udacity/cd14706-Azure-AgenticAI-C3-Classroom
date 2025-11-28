@@ -15,61 +15,32 @@ In this exercise, you'll integrate external API tools into your Semantic Kernel 
 
 ## **Tasks**
 
-### **Task 1: Register the RecommendationTools Plugin**
-
-In `main.py` (line 109), register the RecommendationTools plugin:
-
-```python
-kernel.add_plugin(RecommendationTools(), "recommendations")
-```
-
-**Hint:** Follow the pattern used for other plugins like `InventoryTools`, `ShippingTools`, and `PricingTools`.
-
-### **Task 2: Implement Return Dictionaries in tools/recommendations.py**
+### **Implement Return Dictionaries in tools/recommendations.py**
 
 Complete the 6 TODO sections with return dictionaries. Each method has two cases to implement:
 
 #### **Success Case Pattern:**
-```python
-return {
-    "api_source": "Product Recommendation Engine API",
-    "api_endpoint": f"{self.recommendation_api_base}/v1/recommendations",
-    "recommendation_results": recommendation_api_response["recommendations"]
-}
-```
 
 Your return dictionary should include:
-- `"api_source"`: The name of the API being used
-- `"api_endpoint"`: The full endpoint URL
-- A results key containing the data from the API response
+- `"api_source"`: The name of the API being used (e.g., "Product Recommendation Engine API").
+- `"api_endpoint"`: The full endpoint URL.
+- A results key containing the data from the API response. For example, in `get_product_recommendations`, this would be `"recommendation_results": recommendation_api_response["recommendations"]`.
 
 #### **Failure Case Pattern:**
-```python
-return {
-    "api_source": "Product Recommendation Engine API",
-    "api_endpoint": f"{self.recommendation_api_base}/v1/recommendations",
-    "recommendation_results": {
-        "customer_id": customer_id,
-        "product_id": product_id,
-        "error": f"API call failed: {e}",
-        "products": []
-    }
-}
-```
 
 Your return dictionary should include:
-- `"api_source"`: The name of the API being used
-- `"api_endpoint"`: The full endpoint URL
-- A results dictionary with error information and empty data lists
+- `"api_source"`: The name of the API being used.
+- `"api_endpoint"`: The full endpoint URL.
+- A results dictionary with error information and empty data lists. For example, in `get_product_recommendations`, the `recommendation_results` dictionary should contain an `error` field with the exception message and an empty `products` list.
 
 #### **Methods to Implement (6 TODOs):**
 
 1. `get_product_recommendations()` - Success case
-2. `get_product_recommendations()` - Failure case (in except block)
+2. `get_product_recommendations()` - Failure case (in `except` block)
 3. `get_trending_products()` - Success case
-4. `get_trending_products()` - Failure case (in except block)
+4. `get_trending_products()` - Failure case (in `except` block)
 5. `get_cross_sell_recommendations()` - Success case
-6. `get_cross_sell_recommendations()` - Failure case (in except block)
+6. `get_cross_sell_recommendations()` - Failure case (in `except` block)
 
 Apply similar patterns for `get_trending_products()` and `get_cross_sell_recommendations()`.
 

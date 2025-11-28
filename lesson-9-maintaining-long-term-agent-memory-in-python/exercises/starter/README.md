@@ -10,64 +10,36 @@ Implement an AssistantAgent that uses long-term memory to provide contextual, pe
 
 ### **Instructions**
 
-This exercise has two parts:
+This exercise focuses on implementing the core logic of the `AssistantAgent`'s `chat` method in `main.py` and the database interaction in `long_term_memory/core.py`.
 
-#### **Part 1: Memory Infrastructure (Already Implemented)**
+#### **Part 1: Implement Core Memory Operations (`long_term_memory/core.py`)**
 
-The memory infrastructure operations are already complete:
-- Seeding sample memories
-- Searching and filtering memories
-- Updating memory importance
-- Pruning strategies (importance-based and hybrid)
-- Memory reordering
-- AI-powered optimization
+1.  **In `add_memory()`:**
+    *   Implement the logic to add the `item` to Cosmos DB.
+    *   **Hint:** Use `self._container.upsert_item(item.to_dict())`.
 
-Run the code to see Part 1 working.
+2.  **In `get_memory()`:**
+    *   Implement the logic to retrieve a memory item from Cosmos DB.
+    *   **Hint:** Use `self._container.read_item(item=memory_id, partition_key=session_id)`.
 
-#### **Part 2: Implement AssistantAgent (Your Task)**
+#### **Part 2: Implement the Agent's Chat Logic (`main.py`)**
 
-**Step 1: Implement `__init__` method**
-- Store the session_id
-- Create a LongTermMemory instance (max_memories=1000, importance_threshold=0.3, enable_ai_scoring=True)
-- Get the OpenAI kernel using `get_openai_kernel()`
-- Log a warning if kernel is None
+Your task is to complete the four `TODO`s within the `AssistantAgent`'s `chat` method. The setup and helper functions have been pre-implemented for you.
 
-**Step 2: Implement `chat` method**
+1.  **TODO 1: Retrieve Relevant Memories**
+    *   Call `self.memory.search_memories()` to find memories relevant to the user's query.
 
-The chat method should:
-1. Check if kernel is available (return error message if not)
-2. Retrieve relevant memories using `self.memory.search_memories()`
-   - Use session_id, query, min_importance=0.0, limit=5
-3. Build a memory context string from retrieved memories
-   - Format: `"\n\nRelevant past conversations:\n- {content} (importance: {score:.2f})\n"`
-4. Create a prompt that includes:
-   - System role ("You are a helpful assistant...")
-   - Memory context
-   - User query
-   - Instructions to reference past conversations
-5. Get LLM response using ChatCompletionService:
-   - `chat_service = self.kernel.get_service(type=ChatCompletionClientBase)`
-   - Create ChatHistory and add prompt
-   - Use OpenAIChatPromptExecutionSettings (temperature=0.7, max_tokens=1000)
-   - Call `get_chat_message_contents()`
-6. Store the conversation as memories:
-   - User query: memory_type="conversation", importance=0.7
-   - Agent response: memory_type="conversation", importance=0.6
-   - Use `self._extract_tags()` for tags
-7. Return the response
+2.  **TODO 2: Get the Agent's Response**
+    *   Call `chat_service.get_chat_message_contents()` to get the contextual answer from the LLM. Remember to extract the `content` from the response.
 
-**Step 3: Implement `_extract_tags` method**
-- Convert text to lowercase
-- Check for keywords: "order", "product", "customer", "ORD-", "PROD-", "shipping", "tracking", "inventory", "stock", "price", "review", "rating", "delivery", "item", "purchase"
-- Return found keywords, or ["customer"] if none found
+3.  **TODO 3: Store the User's Query**
+    *   Call `self.memory.add_memory()` to save the user's query to long-term memory.
 
-**Step 4: Test Your Implementation**
-- Uncomment the Part 2 demo code in `run_demo()`
-- Run the code and verify:
-  - Query 1: No memories found → generic response
-  - Query 2: Memories starting to accumulate
-  - Query 3: Agent references past conversations
-  - Session memories grow: 2 → 4 → 6
+4.  **TODO 4: Store the Agent's Response**
+    *   Call `self.memory.add_memory()` to save the agent's response to long-term memory.
+
+#### **Part 3: Test Your Implementation**
+*   Once the `chat` method is complete, uncomment the "Assistant Agent with Memory" section in the `run_demo()` function to test your agent.
 
 ### **Expected Behavior**
 

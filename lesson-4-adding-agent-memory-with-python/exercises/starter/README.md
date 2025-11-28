@@ -16,19 +16,17 @@ Add short-term memory to capture recent conversation and tool calls, and use tha
 
 #### Complete the `ShortTermMemory` class in `memory.py`:
 
-1. **In `add_conversation()` method (line ~58):**
-   - Complete the `item` dictionary with: `role`, `content`, `timestamp`, `tokens`, and `metadata` fields
-   - Use `datetime.now().isoformat()` for timestamp
-   - Use `self._estimate_tokens(content)` for token count
-   - Ensure metadata uses the provided parameter or defaults to empty dict
+1. **In the `add_conversation()` method:**
+   - Complete the `item` dictionary with: `role`, `content`, `timestamp`, `tokens`, and `metadata` fields.
+   - Use `datetime.now().isoformat()` for timestamp.
+   - Use `self._estimate_tokens(content)` for token count.
+   - Ensure metadata uses the provided parameter or defaults to an empty dict.
+   - After creating the `item`, append it to `self.memory_items`.
 
-2. **In `add_conversation()` method (line ~62):**
-   - Append the `item` to `self.memory_items`
-
-3. **In `add_tool_call()` method (line ~81):**
-   - Complete the `metadata` dictionary with: `type`, `tool_name`, `input`, `output`, and `success` fields
-   - Set `type` to `'tool_call'`
-   - Use the function parameters for the other fields
+2. **In the `add_tool_call()` method:**
+   - Complete the `metadata` dictionary with: `type`, `tool_name`, `input`, `output`, and `success` fields.
+   - Set `type` to `'tool_call'`.
+   - Use the function parameters for the other fields.
 
 #### What's Already Implemented:
 

@@ -103,7 +103,9 @@ def create_customer_service_prompt() -> str:
     return """
 You are a helpful customer service agent. You have access to tools to check order status and product information.
 
-When a customer asks about their order or a product, use the appropriate tools and then provide a response in the following JSON format:
+When a customer asks about their order or a product, use the appropriate tools and then provide a response in the following JSON format.
+
+If a customer asks a general question about products you have available, inform them that you can provide details about specific products and ask them for a product ID or name.
 
 {
     "query_type": "order_status" or "product_info" or "general",

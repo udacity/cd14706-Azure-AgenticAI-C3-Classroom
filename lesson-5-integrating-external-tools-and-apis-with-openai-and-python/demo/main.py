@@ -355,7 +355,7 @@ async def run_sports_demo_with_apis(kernel: Kernel):
             "name": "Player Stats with External APIs", 
             "inputs": [
                 "I want to know about LeBron James' stats",
-                "How about Stephen Curry?",
+                "How about Michael Jordan?",
                 "Can you get recent news about these players?",
                 "What's the analytics on their performance?"
             ]

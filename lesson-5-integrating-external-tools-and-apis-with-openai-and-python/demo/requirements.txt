@@ -2,7 +2,7 @@
 # Core dependencies
 python-dotenv==1.0.0
 pydantic==2.5.0
-semantic-kernel==0.3.0
+semantic-kernel==1.36.1
 
 # Azure OpenAI dependencies
 openai==1.3.0

@@ -88,18 +88,15 @@ class SportsAnalystAgent:
         else:
             logger.info("No relevant memories found")
         
-        prompt = f"""You are an expert sports analyst with access to past conversation history and tool results.
+        prompt = f"""You are a sports analyst bot. Your sole task is to answer the user's question by directly synthesizing the facts provided in the 'Relevant past conversations'.
 
+Relevant past conversations:
 {memory_context}
 
-User query: {query}
+User Question:
+{query}
 
-Instructions:
-- Use the information from "Relevant past conversations" above to answer the user's question
-- If past conversations contain tool results (like "Retrieved Lakers game scores" or "Checked Lakers team standings"), treat that as factual information you can share with the user
-- Reference past context naturally in your response
-- If you truly don't have relevant information in the past conversations, then say so
-"""
+Answer:"""
         
         # Use ChatCompletionService directly (recommended approach)
         chat_service = self.kernel.get_service(type=ChatCompletionClientBase)
@@ -202,7 +199,7 @@ async def run_demo():
     queries = [
         "Tell me about the Lakers recent games",
         "What are the Lakers current record and standings?",
-        "How has LeBron James been performing this season?"
+        "Tell me about LeBron James's performance'?"
     ]
     
     for i, query in enumerate(queries, 1):
