@@ -6,7 +6,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-BALLDONTLIE_API = "https://api.balldontlie.io/nba/v1"
+BALLDONTLIE_API = "https://api.balldontlie.io/v1"
 
 class PlayerStatsTools:
     def _get_mock_stats(self, player_name: str, league: str = "NBA"):
