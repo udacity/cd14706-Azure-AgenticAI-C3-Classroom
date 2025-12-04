@@ -109,7 +109,7 @@ This will upsert sample sports information with vector embeddings.
 1. **Data Ingestion**: Sports information is upserted with embeddings generated using Semantic Kernel's AzureTextEmbedding service (for future vector search in L8)
 2. **Query Processing**: User queries are processed through the RAG retriever
 3. **Text Search**: Sports content is found using CONTAINS text search
-4. **Fallback Strategy**: If no matches found, random documents are returned
+4. **Fallback Strategy**: If no matches found, returns empty results (prevents hallucination)
 5. **Response Generation**: Retrieved data is used to generate sports analysis responses
 
 ### Database Schema

@@ -80,7 +80,7 @@ Your task is to complete the helper functions in the `rag` directory and update 
 2.  **In `retrieve()`:**
     *   Build the SQL query for a text-based search using `CONTAINS`.
     *   Execute the query using the `_execute_query_with_retry` function you just implemented.
-    *   Implement a fallback mechanism to retrieve random documents if the initial search yields no results.
+    *   Return the query results (if no results found, return empty list to prevent hallucination).
     *   **Hint:** Remember to add a filter for the `partition_key` if it's provided.
 
 #### **Part 3: Update Agent Logic (`main.py`)**

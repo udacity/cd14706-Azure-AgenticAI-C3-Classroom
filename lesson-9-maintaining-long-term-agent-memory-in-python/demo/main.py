@@ -28,9 +28,9 @@ async def seed_sample_memories(ltm: LongTermMemory):
     await ltm.add_memory(s1, "Lakers last 5 games: Won vs Suns (118-114), Lost vs Nuggets (102-109), Won vs Clippers (125-120), Won vs Pelicans (112-108), Lost vs Warriors (115-120). Record: 3-2",
                          "tool_call", 0.9, ["lakers", "games", "scores", "recent"])
     await ltm.add_memory(s1, "Lakers current standings: 20-15 record (57.1% win rate), 5th place in Western Conference, 4.5 games behind 1st place",
-                         "tool_call", 0.8, ["lakers", "standings", "conference", "record"])
+                         "tool_call", 0.8, ["lakers", "standings", "conference", "record", "current", "season"])
     await ltm.add_memory(s1, "LeBron James stats (last 5 games avg): 26.4 PPG, 7.2 RPG, 8.6 APG, 51.2% FG. Playing 36.2 min/game. Age 39 season performance remains strong.",
-                         "tool_call", 0.8, ["lakers", "lebron-james", "player-stats", "performance"])
+                         "tool_call", 0.8, ["lakers", "lebron-james", "lebron", "james", "player-stats", "performance", "stats", "season"])
     await ltm.add_memory(s1, "User asked: How have the Lakers been performing in recent games?",
                          "conversation", 0.6, ["lakers", "question", "performance"])
 
@@ -76,7 +76,7 @@ class SportsAnalystAgent:
             self.session_id,
             query=query,
             min_importance=0.0,
-            limit=5
+            limit=10
         )
         
         memory_context = ""
@@ -88,15 +88,21 @@ class SportsAnalystAgent:
         else:
             logger.info("No relevant memories found")
         
-        prompt = f"""You are a sports analyst bot. Your sole task is to answer the user's question by directly synthesizing the facts provided in the 'Relevant past conversations'.
+        prompt = f"""You are an expert sports analyst. Answer the user's question using ONLY the specific facts, statistics, and details from the 'Relevant past conversations' below.
+
+CRITICAL INSTRUCTIONS:
+- When statistics are available (scores, percentages, player stats, records), cite them explicitly and precisely
+- Tool results and system events contain factual data - share these specific details directly with the user
+- Do NOT generalize or use vague language when specific numbers and data exist in the context
+- Distinguish between different metrics (e.g., "last 5 games record" vs "season record")
+- If you lack specific information to fully answer the question, acknowledge what's missing
 
 Relevant past conversations:
 {memory_context}
 
-User Question:
-{query}
+User Question: {query}
 
-Answer:"""
+Answer (use specific facts, numbers, and statistics from the context):"""
         
         # Use ChatCompletionService directly (recommended approach)
         chat_service = self.kernel.get_service(type=ChatCompletionClientBase)
@@ -199,7 +205,7 @@ async def run_demo():
     queries = [
         "Tell me about the Lakers recent games",
         "What are the Lakers current record and standings?",
-        "Tell me about LeBron James's performance'?"
+        "How has LeBron James been performing this season?"
     ]
     
     for i, query in enumerate(queries, 1):

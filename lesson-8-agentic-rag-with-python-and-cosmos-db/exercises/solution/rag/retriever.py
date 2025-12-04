@@ -1,5 +1,6 @@
 from azure.cosmos import CosmosClient
 from azure.identity import DefaultAzureCredential
+from azure.cosmos.exceptions import CosmosHttpResponseError
 import os
 import logging
 import asyncio
@@ -105,6 +106,37 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
         logger.error(f"❌ Embedding generation failed: {e}")
         raise Exception(f"Failed to generate embeddings: {e}")
 
+async def _execute_query_with_retry(container, sql: str, params: list, enable_cross_partition: bool, max_retries: int = 3):
+    """Execute Cosmos DB query with retry logic for 400 errors (query plan issues)
+
+    Cosmos DB CONTAINS queries sometimes fail with HTTP 400 on first attempt
+    because the query plan needs to be fetched. This function retries with
+    exponential backoff to handle this gracefully.
+    """
+    for attempt in range(max_retries):
+        try:
+            return list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=enable_cross_partition))
+        except CosmosHttpResponseError as e:
+            # Check if it's a 400 error (query plan issue) and not the last attempt
+            if e.status_code == 400 and attempt < max_retries - 1:
+                # Exponential backoff: 0.1s, 0.2s, 0.4s
+                wait_time = 0.1 * (2 ** attempt)
+                await asyncio.sleep(wait_time)
+                continue
+            # Re-raise if not a 400 error or if it's the last attempt
+            raise
+        except Exception as e:
+            error_str = str(e).lower()
+            # Fallback: check error message for 400 errors (in case exception type differs)
+            if ("400" in error_str or "bad request" in error_str) and attempt < max_retries - 1:
+                # Exponential backoff: 0.1s, 0.2s, 0.4s
+                wait_time = 0.1 * (2 ** attempt)
+                await asyncio.sleep(wait_time)
+                continue
+            # Re-raise if not a 400 error or if it's the last attempt
+            raise
+    return []
+
 async def retrieve_with_vector_search(query: str, k: int = 5, partition_key: str = None) -> List[Dict[str, Any]]:
     """Retrieve documents using vector similarity search"""
     try:
@@ -169,7 +201,17 @@ async def retrieve_with_vector_search(query: str, k: int = 5, partition_key: str
         return []
 
 async def retrieve_with_text_search(query: str, k: int = 5, partition_key: str = None) -> List[Dict[str, Any]]:
-    """Retrieve documents using text-based search as fallback"""
+    """Retrieve documents using text-based search as fallback
+
+    Note: CONTAINS() in Cosmos DB has limitations:
+    - Word-based matching only (not phrase matching)
+    - Case-sensitive by default
+    - Works best with simple keyword queries (e.g., "headphones", "keyboard")
+    - May return 0 results for complex sentence queries
+    - Requires proper indexing for optimal performance
+
+    In hybrid search, vector search compensates for these limitations.
+    """
     try:
         client, container = get_cosmos_client()
         if client is None or container is None:
@@ -177,13 +219,13 @@ async def retrieve_with_text_search(query: str, k: int = 5, partition_key: str =
 
         # Build query with optional partition key filter
         if partition_key:
-            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.keywords, @query, true) AND c.pk = @pk"
+            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.text, @query, true) AND c.pk = @pk"
             params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}, {"name": "@pk", "value": partition_key}]
         else:
-            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.keywords, @query, true)"
+            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.text, @query, true)"
             params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}]
 
-        results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
+        results = await _execute_query_with_retry(container, sql, params, enable_cross_partition=True)
 
         logger.info(f"✅ Text search returned {len(results)} results")
         return results

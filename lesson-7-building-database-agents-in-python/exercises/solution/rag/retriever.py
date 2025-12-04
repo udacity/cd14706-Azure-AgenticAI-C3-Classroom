@@ -123,19 +123,8 @@ async def retrieve(query: str, k: int = 5, partition_key: str = None):
             enable_cross_partition = True
             
         results = await _execute_query_with_retry(container, sql, params, enable_cross_partition)
-        
-        # If no results from text search, get some random documents (with partition key filter if provided)
-        if not results:
-            if partition_key:
-                sql = "SELECT TOP @k c.id, c.text FROM c WHERE c.pk = @pk"
-                params = [{"name": "@k", "value": k}, {"name": "@pk", "value": partition_key}]
-                enable_cross_partition = True
-            else:
-                sql = "SELECT TOP @k c.id, c.text FROM c"
-                params = [{"name": "@k", "value": k}]
-                enable_cross_partition = True
-            results = await _execute_query_with_retry(container, sql, params, enable_cross_partition)
-            
+
+        # If no results from text search, return empty list (don't hallucinate with random documents)
         return results
     except Exception as e:
         print(f"RAG retrieval failed: {e}")

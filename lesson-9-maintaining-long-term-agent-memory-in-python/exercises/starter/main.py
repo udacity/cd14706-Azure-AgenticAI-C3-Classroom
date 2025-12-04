@@ -33,6 +33,10 @@ async def seed_sample_memories(ltm: LongTermMemory):
                          "tool_call", 0.7, ["order", "shipping", "address"])
     await ltm.add_memory(s1, "User asked: When will my order ORD-12345 arrive?",
                          "conversation", 0.6, ["order", "delivery", "question"])
+    await ltm.add_memory(s1, "Product PROD-67890: Wireless Noise-Cancelling Headphones. Price: $99.99. Stock: 24 units available. Color options: Black, Silver, Blue.",
+                         "tool_call", 0.8, ["product", "product-info", "PROD-67890", "headphones"])
+    await ltm.add_memory(s1, "PROD-67890 Reviews: 4.5/5 stars (128 reviews). Top review: 'Amazing sound quality and battery life!' Features: 30hr battery, Bluetooth 5.0, ANC",
+                         "tool_call", 0.7, ["product", "reviews", "ratings", "PROD-67890"])
 
     # Customer session 2 - Product information with ACTUAL product details
     await ltm.add_memory(s2, "Product PROD-67890: Wireless Noise-Cancelling Headphones. Price: $99.99. Stock: 24 units available. Color options: Black, Silver, Blue.",

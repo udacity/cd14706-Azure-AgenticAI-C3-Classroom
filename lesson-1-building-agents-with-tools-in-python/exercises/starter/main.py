@@ -39,45 +39,39 @@ def create_kernel():
     """Create and configure Semantic Kernel with Azure services and tools"""
     try:
         logger.info("🚀 Starting Semantic Kernel setup...")
-        
+
         # Get Azure configuration
         AZURE_OPENAI_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
         AZURE_OPENAI_API_VERSION = os.environ["AZURE_OPENAI_API_VERSION"]
         DEPLOYMENT_CHAT = os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT"]
         DEPLOYMENT_EMBED = os.environ["AZURE_OPENAI_EMBED_DEPLOYMENT"]
         AZURE_OPENAI_KEY = os.environ["AZURE_OPENAI_KEY"]
-        
-        # Create kernel and add services/tools
-        logger.info("🔧 Creating Semantic Kernel instance and adding services/tools...")
-        kernel = Kernel()
-        kernel.add_service(
-            AzureChatCompletion(
-                deployment_name=DEPLOYMENT_CHAT,
-                endpoint=AZURE_OPENAI_ENDPOINT,
-                api_key=AZURE_OPENAI_KEY,
-                api_version=AZURE_OPENAI_API_VERSION
-            )
-        )
+
+        # Create kernel
+        logger.info("🔧 Creating Semantic Kernel instance...")
+        # TODO CREATE KERNEL
+
+        # Add Azure services
+        logger.info("💬 Adding Azure Chat Completion service...")
+        # TODO ADD AZURE CHAT COMPLETION SERVICE
+
         logger.info("✅ Azure Chat Completion service added successfully")
-        kernel.add_service(
-            AzureTextEmbedding(
-                deployment_name=DEPLOYMENT_EMBED,
-                endpoint=AZURE_OPENAI_ENDPOINT,
-                api_key=AZURE_OPENAI_KEY,
-                api_version=AZURE_OPENAI_API_VERSION
-            )
-        )
+
+        logger.info("🧠 Adding Azure Text Embedding service...")
+        # TODO ADD AZURE TEXT EMBEDDING SERVICE
+
         logger.info("✅ Azure Text Embedding service added successfully")
+
         # Add tools as SK plugins
         logger.info("🛠️ Adding custom tools as Semantic Kernel plugins...")
-        kernel.add_plugin(OrderStatusTools(), "order_status")
+        # TODO ADD ORDER STATUS TOOLS
         logger.info("✅ OrderStatusTools plugin added successfully")
-        kernel.add_plugin(ProductInfoTools(), "product_info")
+        # TODO ADD PRODUCT INFO TOOLS
         logger.info("✅ ProductInfoTools plugin added successfully")
-        
+
         logger.info("🎉 Semantic Kernel setup completed successfully!")
         return kernel
-        
+
     except KeyError as e:
         logger.error(f"❌ Missing required environment variable: {e}")
         raise

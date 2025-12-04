@@ -113,14 +113,8 @@ async def retrieve_with_text_search(query: str, k: int = 5) -> List[Dict[str, An
         sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.text, @query, true)"
         params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}]
         results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
-        
-        # If no results from text search, get some random documents
-        if not results:
-            logger.warning("No text search results, falling back to random documents")
-            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c"
-            params = [{"name": "@k", "value": k}]
-            results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
-        
+
+        # If no results from text search, return empty list (don't hallucinate with random documents)
         logger.info(f"✅ Text search returned {len(results)} results")
         return results
         

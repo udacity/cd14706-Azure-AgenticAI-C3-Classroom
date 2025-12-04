@@ -1,7 +1,9 @@
 from azure.cosmos import CosmosClient
 from azure.identity import DefaultAzureCredential
+from azure.cosmos.exceptions import CosmosHttpResponseError
 import os
 import logging
+import asyncio
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
@@ -99,6 +101,37 @@ async def embed_texts(texts: List[str]) -> List[List[float]]:
         logger.error(f"❌ Embedding generation failed: {e}")
         raise Exception(f"Failed to generate embeddings: {e}")
 
+async def _execute_query_with_retry(container, sql: str, params: list, enable_cross_partition: bool, max_retries: int = 3):
+    """Execute Cosmos DB query with retry logic for 400 errors (query plan issues)
+
+    Cosmos DB CONTAINS queries sometimes fail with HTTP 400 on first attempt
+    because the query plan needs to be fetched. This function retries with
+    exponential backoff to handle this gracefully.
+    """
+    for attempt in range(max_retries):
+        try:
+            return list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=enable_cross_partition))
+        except CosmosHttpResponseError as e:
+            # Check if it's a 400 error (query plan issue) and not the last attempt
+            if e.status_code == 400 and attempt < max_retries - 1:
+                # Exponential backoff: 0.1s, 0.2s, 0.4s
+                wait_time = 0.1 * (2 ** attempt)
+                await asyncio.sleep(wait_time)
+                continue
+            # Re-raise if not a 400 error or if it's the last attempt
+            raise
+        except Exception as e:
+            error_str = str(e).lower()
+            # Fallback: check error message for 400 errors (in case exception type differs)
+            if ("400" in error_str or "bad request" in error_str) and attempt < max_retries - 1:
+                # Exponential backoff: 0.1s, 0.2s, 0.4s
+                wait_time = 0.1 * (2 ** attempt)
+                await asyncio.sleep(wait_time)
+                continue
+            # Re-raise if not a 400 error or if it's the last attempt
+            raise
+    return []
+
 async def retrieve_with_vector_search(query: str, k: int = 5, partition_key: str = None) -> List[Dict[str, Any]]:
     """Retrieve documents using vector similarity search"""
     try:
@@ -122,31 +155,16 @@ async def retrieve_with_vector_search(query: str, k: int = 5, partition_key: str
 
         logger.debug(f"Query vector dimension: {len(query_vector)}, first few values: {query_vector[:3]}")
 
-        # TODO: Implement vector similarity search
-        # Hint: Write a SQL query that uses VectorDistance() to find similar documents
-        # - Use SELECT TOP @k to limit results
-        # - Calculate similarity: VectorDistance(c.embedding, @queryVector, false)
-        # - Filter: WHERE IS_DEFINED(c.embedding) AND IS_ARRAY(c.embedding)
-        # - If partition_key is provided, add: AND c.pk = @pk
-        # - Order by similarity (lower distance = more similar)
-        query_vector_clean = [float(x) for x in query_vector]
+        # TODO: Use vector similarity search
+        sql = """"""
+        params = [
+            {"name": "@k", "value": k},
+            {"name": "@queryVector", "value": query_vector}
+        ]
 
-        if partition_key:
-            sql = "SELECT TOP @k c.id, c.text, c.pk, VectorDistance(c.embedding, @queryVector, false) AS similarity FROM c WHERE IS_DEFINED(c.embedding) AND IS_ARRAY(c.embedding) AND c.pk = @pk ORDER BY similarity ASC"
-            params = [
-                {"name": "@k", "value": int(k)},
-                {"name": "@queryVector", "value": query_vector_clean},
-                {"name": "@pk", "value": partition_key}
-            ]
-        else:
-            sql = "SELECT TOP @k c.id, c.text, c.pk, VectorDistance(c.embedding, @queryVector, false) AS similarity FROM c WHERE IS_DEFINED(c.embedding) AND IS_ARRAY(c.embedding) ORDER BY similarity ASC"
-            params = [
-                {"name": "@k", "value": int(k)},
-                {"name": "@queryVector", "value": query_vector_clean}
-            ]
-
-        logger.debug(f"Executing vector search with {len(query_vector_clean)}-dimensional vector")
+        logger.debug(f"Executing vector search with {len(query_vector)}-dimensional vector")
         results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
+
         logger.info(f"✅ Vector search returned {len(results)} results")
         return results
         
@@ -157,7 +175,17 @@ async def retrieve_with_vector_search(query: str, k: int = 5, partition_key: str
         return []
 
 async def retrieve_with_text_search(query: str, k: int = 5, partition_key: str = None) -> List[Dict[str, Any]]:
-    """Retrieve documents using text-based search as fallback"""
+    """Retrieve documents using text-based search as fallback
+
+    Note: CONTAINS() in Cosmos DB has limitations:
+    - Word-based matching only (not phrase matching)
+    - Case-sensitive by default
+    - Works best with simple keyword queries (e.g., "headphones", "keyboard")
+    - May return 0 results for complex sentence queries
+    - Requires proper indexing for optimal performance
+
+    In hybrid search, vector search compensates for these limitations.
+    """
     try:
         client, container = get_cosmos_client()
         if client is None or container is None:
@@ -165,24 +193,13 @@ async def retrieve_with_text_search(query: str, k: int = 5, partition_key: str =
 
         # Build query with optional partition key filter
         if partition_key:
-            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.keywords, @query, true) AND c.pk = @pk"
+            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.text, @query, true) AND c.pk = @pk"
             params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}, {"name": "@pk", "value": partition_key}]
         else:
-            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.keywords, @query, true)"
+            sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE CONTAINS(c.text, @query, true)"
             params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}]
 
-        results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
-
-        # If no results from text search, get some random documents
-        if not results:
-            logger.warning("No text search results, falling back to random documents")
-            if partition_key:
-                sql = "SELECT TOP @k c.id, c.text, c.pk FROM c WHERE c.pk = @pk"
-                params = [{"name": "@k", "value": k}, {"name": "@pk", "value": partition_key}]
-            else:
-                sql = "SELECT TOP @k c.id, c.text, c.pk FROM c"
-                params = [{"name": "@k", "value": k}]
-            results = list(container.query_items(query=sql, parameters=params, enable_cross_partition_query=True))
+        results = await _execute_query_with_retry(container, sql, params, enable_cross_partition=True)
 
         logger.info(f"✅ Text search returned {len(results)} results")
         return results
@@ -191,26 +208,38 @@ async def retrieve_with_text_search(query: str, k: int = 5, partition_key: str =
         logger.error(f"❌ Text search failed: {e}")
         return []
 
-async def retrieve_with_hybrid_search(query: str, k: int = 5, partition_key: str = None) -> List[Dict[str, Any]]:
-    """Retrieve documents using hybrid search (vector + text)"""
-    try:
-        # Try vector search first
-        vector_results = await retrieve_with_vector_search(query, k, partition_key)
-
-        if vector_results:
-            logger.info("✅ Using vector search results")
-            return vector_results
-
-        # Fallback to text search
-        logger.info("⚠️ Vector search failed, falling back to text search")
-        text_results = await retrieve_with_text_search(query, k, partition_key)
-
-        if text_results:
-            logger.info("✅ Using text search results")
-            return text_results
-
-        logger.warning("All search methods failed - returning empty results")
+def rerank_results(results_list: List[List[Dict[str, Any]]], k: int = 5) -> List[Dict[str, Any]]:
+    """Rerank results from multiple search methods using Reciprocal Rank Fusion (RRF)"""
+    if not results_list:
         return []
+
+    ranked_results = {}
+    for results in results_list:
+        for i, result in enumerate(results):
+            doc_id = result.get("id")
+            if doc_id not in ranked_results:
+                ranked_results[doc_id] = {"doc": result, "score": 0}
+            ranked_results[doc_id]["score"] += 1 / (i + 60)  # RRF formula
+
+    sorted_results = sorted(ranked_results.values(), key=lambda x: x["score"], reverse=True)
+    
+    final_results = [item["doc"] for item in sorted_results[:k]]
+    return final_results
+
+async def retrieve_with_hybrid_search(query: str, k: int = 5, partition_key: str = None) -> List[Dict[str, Any]]:
+    """Retrieve documents using hybrid search (vector + text) and rerank with RRF"""
+    try:
+        # Perform vector and text searches in parallel
+        vector_results_task = retrieve_with_vector_search(query, k, partition_key)
+        text_results_task = retrieve_with_text_search(query, k, partition_key)
+        
+        vector_results, text_results = await asyncio.gather(vector_results_task, text_results_task)
+
+        # Rerank results
+        reranked_results = rerank_results([vector_results, text_results], k)
+        
+        logger.info(f"✅ Hybrid search reranked {len(reranked_results)} results")
+        return reranked_results
 
     except Exception as e:
         logger.error(f"Hybrid search failed: {e}")
@@ -251,74 +280,4 @@ async def retrieve(query: str, k: int = 5, search_type: str = "hybrid", partitio
         logger.error(f"❌ Document retrieval failed: {e}")
         return []
 
-async def assess_retrieval_quality(query: str, retrieved_docs: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Assess the quality of retrieved documents
-    
-    Args:
-        query: The original query
-        retrieved_docs: List of retrieved documents
-    
-    Returns:
-        Quality assessment with confidence score and reasoning
-    """
-    try:
-        if not retrieved_docs:
-            return {
-                "confidence": 0.0,
-                "reasoning": "No documents retrieved",
-                "issues": ["No documents found"],
-                "suggestions": ["Try a different query", "Check database connectivity"]
-            }
-        
-        # Simple quality assessment based on document count and content
-        doc_count = len(retrieved_docs)
-        query_words = set(query.lower().split())
-        
-        # Check relevance by counting query word matches
-        total_matches = 0
-        for doc in retrieved_docs:
-            doc_text = doc.get("text", "").lower()
-            matches = sum(1 for word in query_words if word in doc_text)
-            total_matches += matches
-        
-        avg_matches = total_matches / doc_count if doc_count > 0 else 0
-        relevance_score = min(avg_matches / len(query_words), 1.0) if query_words else 0.0
-        
-        # Calculate confidence based on document count and relevance
-        count_score = min(doc_count / 3, 1.0)  # Prefer 3+ documents
-        confidence = (relevance_score * 0.7 + count_score * 0.3)
-        
-        # Determine issues and suggestions
-        issues = []
-        suggestions = []
-        
-        if confidence < 0.5:
-            issues.append("Low relevance to query")
-            suggestions.append("Try more specific keywords")
-        
-        if doc_count < 2:
-            issues.append("Insufficient document count")
-            suggestions.append("Try broader search terms")
-        
-        if avg_matches < 1:
-            issues.append("No keyword matches found")
-            suggestions.append("Check spelling and try synonyms")
-        
-        reasoning = f"Retrieved {doc_count} documents with {avg_matches:.1f} average keyword matches per document"
-        
-        return {
-            "confidence": confidence,
-            "reasoning": reasoning,
-            "issues": issues,
-            "suggestions": suggestions
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Quality assessment failed: {e}")
-        return {
-            "confidence": 0.3,
-            "reasoning": f"Assessment error: {e}",
-            "issues": ["Assessment system error"],
-            "suggestions": ["Try again later"]
-        }
+

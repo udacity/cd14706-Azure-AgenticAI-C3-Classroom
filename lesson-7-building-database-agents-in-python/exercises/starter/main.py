@@ -215,7 +215,7 @@ async def process_customer_query(kernel: Kernel, query: str) -> CustomerServiceR
         prompt = f"{create_customer_service_prompt()}\n\nCustomer query: {query}"
         
         # TODO: Use ChatCompletionService directly for better control
-        # Hint: Get service with kernel.get_service(type="ChatCompletionService")
+        # Hint: Get service with kernel.get_service(type=ChatCompletionClientBase)
         # Create ChatHistory, add user message with prompt
         # Create OpenAIChatPromptExecutionSettings(temperature=0.7, max_tokens=2000)
         # Call chat_service.get_chat_message_contents() and extract response[0].content

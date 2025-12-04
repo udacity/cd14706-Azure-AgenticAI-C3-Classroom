@@ -41,7 +41,7 @@ class ToolLoggingFilter:
         logger.info(f"Tool {function.name} completed successfully")
 
 
-class AgenticRAGAgent:
+class SportsAnalystAgent:
     
     def __init__(self, kernel: Kernel):
         self.kernel = kernel
@@ -317,7 +317,7 @@ async def test_agentic_rag_queries():
     logger.info("=" * 60)
     
     kernel = create_kernel()
-    rag_agent = AgenticRAGAgent(kernel)
+    sportsanalystAgent = SportsAnalystAgent(kernel)
     
     test_queries = [
         "What are the Lakers' recent game results and current record?",
@@ -332,7 +332,7 @@ async def test_agentic_rag_queries():
         logger.info("-" * 50)
         
         try:
-            response = await rag_agent.process_query(query)
+            response = await sportsanalystAgent.process_query(query)
             
             logger.info(f"Answer: {response.answer}")
             logger.info(f"Confidence: {response.confidence_score:.2f}")

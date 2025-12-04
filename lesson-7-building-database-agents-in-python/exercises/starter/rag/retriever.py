@@ -98,9 +98,8 @@ async def retrieve(query: str, k: int = 5, partition_key: str = None):
         # TODO: Execute query using _execute_query_with_retry
         # Hint: results = await _execute_query_with_retry(container, sql, params, enable_cross_partition)
 
-        # TODO: If no results, get random documents as fallback
-        # Hint: Check if not results, then query "SELECT TOP @k c.id, c.text FROM c"
-        # Add partition key filter if provided
+        # TODO: If no results from text search, return empty list (don't hallucinate with random documents)
+        # Hint: Simply return the results from the query above
 
         results = []
     except Exception as e:
