@@ -258,7 +258,7 @@ async def main():
         # Run conversational agent demo
 
 
-        await chat_with_agent(kernel, "What were the latest NBA game scores?")
+        await chat_with_agent(kernel, "Show me NBA scores.")
 
         logger.info("=" * 60)
         logger.info("✅ Sports Analyst Bot Demo completed successfully!")
