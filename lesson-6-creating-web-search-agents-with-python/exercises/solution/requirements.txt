@@ -9,7 +9,7 @@ semantic-kernel==1.36.1
 # Azure AI Agents with Bing Search grounding
 azure-ai-projects==1.0.0
 azure-ai-agents==1.2.0b3
-azure-identity
+azure-identity==1.24.0
 
 # External API integration dependencies
 urllib3==2.0.7
