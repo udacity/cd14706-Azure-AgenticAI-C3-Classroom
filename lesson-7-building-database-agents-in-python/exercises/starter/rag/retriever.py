@@ -90,18 +90,20 @@ async def retrieve(query: str, k: int = 5, partition_key: str = None):
         if client is None or container is None:
             raise Exception("Cosmos DB not available")
         
-        # TODO: Build SQL query with CONTAINS for text search
-        # Hint: If partition_key provided, add "AND c.pk = @pk" to filter by partition
-        # Use enable_cross_partition = True (CONTAINS requires it)
-        # Set sql, params, enable_cross_partition variables
+        # TODO: Build SQL query with CONTAINS for case-insensitive text search
+        # Hint 1: Split query into terms using query.lower().split()
+        # Hint 2: For single term: "SELECT TOP @k c.id, c.text FROM c WHERE CONTAINS(LOWER(c.text), @term0) AND c.pk = @pk"
+        # Hint 3: For multiple terms, use OR logic: (CONTAINS(LOWER(c.text), @term0) OR CONTAINS(LOWER(c.text), @term1))
+        # Hint 4: Set enable_cross_partition = True (CONTAINS requires it)
 
         # TODO: Execute query using _execute_query_with_retry
         # Hint: results = await _execute_query_with_retry(container, sql, params, enable_cross_partition)
 
-        # TODO: If no results from text search, return empty list (don't hallucinate with random documents)
-        # Hint: Simply return the results from the query above
+        # TODO: Return the results
+        # Hint: return results
 
         results = []
+        return results
     except Exception as e:
         print(f"RAG retrieval failed: {e}")
         return []

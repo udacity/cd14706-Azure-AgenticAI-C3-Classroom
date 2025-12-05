@@ -110,18 +110,32 @@ async def retrieve(query: str, k: int = 5, partition_key: str = None):
             raise Exception("Cosmos DB not available")
         
         # Build query with optional partition key filter
+        # Split query into terms and search for any term match (OR logic)
+        query_terms = query.lower().split()
+
         if partition_key:
             # Filter by partition key to prevent contamination from other runs
-            # Note: CONTAINS() requires enable_cross_partition=True even with partition key filter
-            sql = "SELECT TOP @k c.id, c.text FROM c WHERE CONTAINS(c.text, @query, true) AND c.pk = @pk"
-            params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}, {"name": "@pk", "value": partition_key}]
+            # Search for any term in the query using OR logic
+            if len(query_terms) == 1:
+                sql = "SELECT TOP @k c.id, c.text FROM c WHERE CONTAINS(LOWER(c.text), @term0) AND c.pk = @pk"
+                params = [{"name": "@k", "value": k}, {"name": "@term0", "value": query_terms[0]}, {"name": "@pk", "value": partition_key}]
+            else:
+                # Build OR conditions for multiple terms
+                conditions = " OR ".join([f"CONTAINS(LOWER(c.text), @term{i})" for i in range(len(query_terms))])
+                sql = f"SELECT TOP @k c.id, c.text FROM c WHERE ({conditions}) AND c.pk = @pk"
+                params = [{"name": "@k", "value": k}] + [{"name": f"@term{i}", "value": term} for i, term in enumerate(query_terms)] + [{"name": "@pk", "value": partition_key}]
             enable_cross_partition = True
         else:
             # Legacy behavior: search across all partitions
-            sql = "SELECT TOP @k c.id, c.text FROM c WHERE CONTAINS(c.text, @query, true)"
-            params = [{"name": "@k", "value": k}, {"name": "@query", "value": query}]
+            if len(query_terms) == 1:
+                sql = "SELECT TOP @k c.id, c.text FROM c WHERE CONTAINS(LOWER(c.text), @term0)"
+                params = [{"name": "@k", "value": k}, {"name": "@term0", "value": query_terms[0]}]
+            else:
+                conditions = " OR ".join([f"CONTAINS(LOWER(c.text), @term{i})" for i in range(len(query_terms))])
+                sql = f"SELECT TOP @k c.id, c.text FROM c WHERE {conditions}"
+                params = [{"name": "@k", "value": k}] + [{"name": f"@term{i}", "value": term} for i, term in enumerate(query_terms)]
             enable_cross_partition = True
-            
+
         results = await _execute_query_with_retry(container, sql, params, enable_cross_partition)
 
         # If no results from text search, return empty list (don't hallucinate with random documents)
