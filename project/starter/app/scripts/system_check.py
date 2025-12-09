@@ -107,9 +107,9 @@ def check_tools():
         from app.tools.card import CardTools
         from app.tools.knowledge import KnowledgeTools
         from app.tools.search import SearchTools
-        weather = WeatherTools().get_weather(48.8566, 2.3522)
+        weather = WeatherTools().get_weather("Paris")
         fx = FxTools().convert_fx(100, "USD", "EUR")
-        card = CardTools().recommend_card("5812", 100.0, "France")
+        card = CardTools().recommend_card("dining", "France")
         knowledge = asyncio.run(KnowledgeTools().search_knowledge("BankGold dining"))
         search = SearchTools().web_search("test", max_results=1)
         print("✅ Weather, FX, Card, Knowledge, Search tools: Working")
@@ -160,7 +160,7 @@ def check_memory_systems():
     print("-" * 40)
     try:
         from app.memory import ShortTermMemory
-        from app.long_term_memory import LongTermMemory
+        from app.long_term_memory.core import LongTermMemory
         stm = ShortTermMemory(max_items=5, max_tokens=1000)
         stm.add_conversation("user", "Hello")
         stm.add_conversation("assistant", "Hi there!")

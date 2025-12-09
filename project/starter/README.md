@@ -38,8 +38,8 @@ print(plan_data["plan"]["destination"])
 
 ## 🏗️ Architecture
 
-- **Semantic Kernel**: Tool orchestration and state management
-- **Azure OpenAI**: GPT-4o-mini for chat and text-embedding-3-small for embeddings
+- **Semantic Kernel**: Tool orchestration, state management, and service integration (AzureChatCompletion and AzureTextEmbedding)
+- **Azure OpenAI**: GPT-4o-mini for chat and text-embedding-3-small for embeddings, accessed via Semantic Kernel services
 - **Memory Systems**: Short-term and long-term memory for context management
 - **Cosmos DB**: Vector RAG for long-term memory and knowledge retrieval
 - **Class-Based Tools**: Modular tool architecture (WeatherTools, FxTools, SearchTools, CardTools)
@@ -92,10 +92,10 @@ python run_tests.py --quick                   # Quick tests only
 app/
 ├── main.py                 # Main entry point with SK integration
 ├── models.py              # Pydantic schemas
-├── synthesis.py           # AI synthesis and JSON generation
+├── knowledge_base.py      # Card knowledge base data
 ├── state.py               # Enhanced agent state machine (8 phases)
 ├── memory.py              # Short-term memory system
-├── long_term_memory.py    # Long-term memory with Cosmos DB
+├── long_term_memory/      # Long-term memory with Cosmos DB
 ├── tools/                 # Class-based tool implementations
 ├── rag/                   # Vector RAG system
 ├── eval/                  # Evaluation harness

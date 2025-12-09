@@ -3,34 +3,24 @@ from semantic_kernel.functions import kernel_function
 import requests
 
 class FxTools:
-    @kernel_function(name="convert_fx", description="Convert currency using Frankfurter API")
+    @kernel_function(name="convert_fx", description="Convert currency via Frankfurter")
     def convert_fx(self, amount: float, base: str, target: str):
         """
-        Convert currency using Frankfurter API.
-        
-        TODO: Implement currency conversion using Frankfurter API
-        - Use the Frankfurter API: https://api.frankfurter.app/latest
-        - Convert from base currency to target currency
-        - Handle API errors gracefully
-        - Return conversion data including rates
-        
-        Hint: Use requests.get() with proper error handling
+        Convert currency using the Frankfurter API.
+
+        Args:
+            amount: Amount to convert
+            base: Source currency code (e.g., USD)
+            target: Target currency code (e.g., EUR)
+
+        Returns:
+            JSON response with conversion rates
+
+        TODO: Implement currency conversion API call
+        - Frankfurter API endpoint: https://api.frankfurter.app/latest
+        - Query params: amount, from (base currency), to (target currency)
+        - Use requests.get() with timeout and return .json() response
         """
-        # TODO: Implement currency conversion API call
+        # TODO: Make API request to Frankfurter and return JSON response
         # This is a placeholder - replace with actual implementation
-        try:
-            # TODO: Construct API URL with parameters
-            # TODO: Make API request
-            # TODO: Handle response and errors
-            # TODO: Return conversion data as dictionary
-            
-            # Placeholder response
-            return {
-                "amount": amount,
-                "base": base,
-                "date": "2026-06-01",
-                "rates": {target: 0.85}  # Example rate
-            }
-        except Exception as e:
-            # TODO: Implement proper error handling
-            return {"error": str(e)}
+        pass

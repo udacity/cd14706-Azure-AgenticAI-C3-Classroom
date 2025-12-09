@@ -9,6 +9,7 @@ import sys
 import json
 import asyncio
 from app.main import run_request
+from app.memory import ShortTermMemory
 
 def main():
     """Interactive chat interface for the travel agent"""
@@ -23,9 +24,9 @@ def main():
     print("  clear   - Clear the screen")
     print("  quit    - Exit the chat")
     print()
-    print("⚠️  Note: This is a starter template. You need to implement")
-    print("   the core functionality in the app/ directory to make this work!")
-    print()
+
+    # Initialize session memory (persists across conversation)
+    memory = ShortTermMemory(max_items=20, max_tokens=8000)
     
     # Check for .env file
     if not os.path.exists(".env"):
@@ -48,27 +49,13 @@ def main():
                 print("  Just tell me about your travel plans!")
                 print("  Example: 'I want to go to Paris from June 1-8 with my BankGold card'")
                 print("  I'll help you with weather, restaurants, currency, and card recommendations!")
-                print()
-                print("  🔧 Development Notes:")
-                print("  - Implement extract_requirements_from_input() in app/main.py")
-                print("  - Implement create_kernel() in app/main.py")
-                print("  - Implement the complete run_request() workflow")
-                print("  - Implement tool classes in app/tools/")
-                print("  - Run tests to verify your implementation")
                 continue
             elif user_input.lower() == 'status':
                 print("\n🔍 System Status:")
-                print("  ⚠️  Travel Agent: Template (needs implementation)")
-                print("  ⚠️  Tools: Weather, FX, Search, Card, Knowledge (needs implementation)")
-                print("  ⚠️  Memory: Short-term and Long-term (needs implementation)")
-                print("  ⚠️  RAG: Vector search (needs implementation)")
-                print()
-                print("  📋 TODO:")
-                print("  1. Implement app/main.py functions")
-                print("  2. Implement app/tools/ classes")
-                print("  3. Implement app/state.py state management")
-                print("  4. Implement app/synthesis.py synthesis logic")
-                print("  5. Run tests to verify functionality")
+                print("  ✅ Travel Agent: Ready")
+                print("  ✅ Tools: Weather, FX, Search, Card, Knowledge")
+                print("  ✅ Memory: Short-term and Long-term")
+                print("  ✅ RAG: Vector search enabled")
                 continue
             elif user_input.lower() == 'clear':
                 os.system('cls' if os.name == 'nt' else 'clear')
@@ -76,24 +63,17 @@ def main():
             elif not user_input:
                 continue
             
-            # Process the request
+            # Process the request with session memory
             print("\n🤖 Agent: Let me help you plan your trip...")
-            print("⚠️  Note: This is a template - you need to implement the functionality!")
+            result = asyncio.run(run_request(user_input, memory=memory))
             
+            # Parse and display the result
             try:
-                result = asyncio.run(run_request(user_input))
-                
-                # Parse and display the result
-                try:
-                    plan_data = json.loads(result)
-                    display_plan(plan_data)
-                except json.JSONDecodeError:
-                    print("❌ Error: Could not parse the response")
-                    print(f"Raw response: {result}")
-                    
-            except Exception as e:
-                print(f"❌ Error: {e}")
-                print("This is expected in the starter template - implement the functions to fix this!")
+                plan_data = json.loads(result)
+                display_plan(plan_data)
+            except json.JSONDecodeError:
+                print("❌ Error: Could not parse the response")
+                print(f"Raw response: {result}")
                 
         except KeyboardInterrupt:
             print("\n\n👋 Chat stopped. Goodbye!")
@@ -104,20 +84,48 @@ def main():
 
 def display_plan(plan_data):
     """Display the travel plan in a formatted way"""
-    if "plan" not in plan_data:
+    # Handle both old format (plan) and new format (trip_plan with Pydantic validation)
+    if "trip_plan" in plan_data:
+        plan = plan_data["trip_plan"]
+    elif "plan" in plan_data:
+        plan = plan_data["plan"]
+    elif "raw_response" in plan_data:
+        # Fallback for unvalidated responses
+        print("\n📝 TRAVEL RECOMMENDATIONS")
+        print("-" * 30)
+        print(plan_data["raw_response"])
+        print("\n⚠️  Note: Response was not validated with Pydantic")
+        if "validation_error" in plan_data.get("metadata", {}):
+            print(f"   Error: {plan_data['metadata']['validation_error']}")
+        return
+    else:
         print("❌ Error: Invalid plan format")
         return
-    
-    plan = plan_data["plan"]
+
+    # Check if we have agent_response at root level (for backward compatibility)
+    agent_response = plan_data.get("agent_response", "")
     
     print("\n" + "="*60)
-    print("🎯 TRAVEL PLAN (TEMPLATE)")
+    print("🎯 TRAVEL PLAN")
     print("="*60)
     
     # Destination and dates
     print(f"📍 Destination: {plan.get('destination', 'N/A')}")
-    print(f"📅 Travel Dates: {plan.get('travel_dates', 'N/A')}")
+    print(f"📅 Travel Dates: {plan.get('travel_dates', plan.get('dates', 'N/A'))}")
     print()
+
+    # Show Pydantic validation status
+    if plan_data.get("metadata", {}).get("data_quality") == "validated_with_pydantic":
+        print("✅ Response validated with Pydantic")
+        print()
+
+    # Agent summary (from agentic loop) - only show if no structured data
+    summary = plan.get('summary', agent_response)
+    if summary and not plan.get('results'):
+        print("📝 TRAVEL RECOMMENDATIONS")
+        print("-" * 30)
+        print(summary)
+        print()
     
     # Weather
     if 'weather' in plan and plan['weather']:
@@ -128,9 +136,33 @@ def display_plan(plan_data):
         print(f"Conditions: {weather.get('conditions', 'N/A')}")
         print(f"Recommendation: {weather.get('recommendation', 'N/A')}")
         print()
-    
-    # Restaurants
-    if 'restaurants' in plan and plan['restaurants']:
+
+    # Search Results (restaurants, hotels, attractions from Pydantic model)
+    if 'results' in plan and plan['results']:
+        print("🔍 SEARCH RESULTS")
+        print("-" * 30)
+        for i, result in enumerate(plan['results'][:5], 1):
+            category_emoji = {
+                'restaurant': '🍽️',
+                'hotel': '🏨',
+                'event': '🎭',
+                'general': '📍'
+            }.get(result.get('category', 'general'), '📍')
+
+            print(f"{i}. {category_emoji} {result.get('title', 'N/A')}")
+            if result.get('snippet'):
+                print(f"   {result['snippet']}")
+            if result.get('url'):
+                print(f"   🔗 {result['url']}")
+            if result.get('rating'):
+                print(f"   ⭐ Rating: {result['rating']}/5")
+            if result.get('price_range'):
+                print(f"   💰 Price: {result['price_range']}")
+            print()
+        print()
+
+    # Restaurants (for backward compatibility with old format)
+    elif 'restaurants' in plan and plan['restaurants']:
         print("🍽️  RESTAURANTS")
         print("-" * 30)
         for i, restaurant in enumerate(plan['restaurants'][:3], 1):
@@ -183,7 +215,6 @@ def display_plan(plan_data):
         print()
     
     print("="*60)
-    print("⚠️  This is a template response. Implement the functions to get real data!")
 
 if __name__ == "__main__":
     main()

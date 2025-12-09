@@ -307,11 +307,11 @@ project/solution/
 ├── app/                    # Main application
 │   ├── main.py            # Entry point with Semantic Kernel
 │   ├── models.py          # Pydantic schemas
-│   ├── synthesis.py       # AI synthesis and JSON generation
+│   ├── knowledge_base.py  # Card knowledge base data
 │   ├── state.py           # Agent state machine
 │   ├── agent.py           # Azure OpenAI client functions
 │   ├── memory.py          # Short-term memory system
-│   ├── long_term_memory.py # Long-term memory with Cosmos DB
+│   ├── long_term_memory/  # Long-term memory with Cosmos DB
 │   ├── tools/             # Tool implementations
 │   │   ├── weather.py     # Open-Meteo weather API
 │   │   ├── fx.py          # Frankfurter currency API

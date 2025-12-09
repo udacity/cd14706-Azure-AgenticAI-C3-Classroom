@@ -215,9 +215,9 @@ python chat.py
 - **`app/state.py`** - Enhanced state management system with 8 phases
 - **`app/tools/`** - Class-based tool implementations (WeatherTools, FxTools, etc.)
 - **`app/memory.py`** - Short-term memory system
-- **`app/long_term_memory.py`** - Long-term memory system with Cosmos DB
+- **`app/long_term_memory/`** - Long-term memory system with Cosmos DB
 - **`app/models.py`** - Pydantic data models (TripPlan, Weather, etc.)
-- **`app/synthesis.py`** - AI synthesis and JSON generation
+- **`app/knowledge_base.py`** - Card knowledge base data
 - **`app/rag/`** - Vector RAG system for knowledge retrieval
 
 ### Testing Your Code
@@ -235,7 +235,7 @@ python chat.py
 ```bash
 # Make sure you're in the right directory
 pwd
-# Should be: .../project/starter
+# Should be: .../project/solution
 
 # Check Python path
 python -c "import sys; print(sys.path)"

@@ -7,8 +7,8 @@ An intelligent travel planning agent built with Microsoft Semantic Kernel, Azure
 ## 🏗️ Architecture
 
 ### Core Components
-- **Semantic Kernel**: Tool orchestration and state management with Azure OpenAI
-- **Azure OpenAI**: GPT-4o-mini for chat and text-embedding-3-small for embeddings
+- **Semantic Kernel**: Tool orchestration, state management, and service integration (AzureChatCompletion and AzureTextEmbedding)
+- **Azure OpenAI**: GPT-4o-mini for chat and text-embedding-3-small for embeddings, accessed via Semantic Kernel services
 - **Memory Systems**: Short-term and long-term memory for context management
 - **Cosmos DB**: Vector RAG for long-term memory and knowledge retrieval
 - **External APIs**: Open-Meteo (weather), Frankfurter (FX), Bing (search)
@@ -19,13 +19,15 @@ An intelligent travel planning agent built with Microsoft Semantic Kernel, Azure
 Init → ClarifyRequirements → PlanTools → ExecuteTools → Synthesize → Done
 ```
 
-The agent uses an 8-phase state machine for robust processing:
+The agent uses a streamlined 6-phase workflow for robust processing:
 1. **Init**: Initialize the agent and validate configuration
 2. **ClarifyRequirements**: Extract requirements from user input
 3. **PlanTools**: Determine which tools to execute
 4. **ExecuteTools**: Run the selected tools in parallel
 5. **Synthesize**: Combine results into a comprehensive travel plan
 6. **Done**: Complete the process and return results
+
+**Note**: The `AgentState` class supports additional phases (AnalyzeResults, ResolveIssues, ProduceStructuredOutput) for more complex workflows, but the current implementation uses a simplified flow optimized for travel planning.
 
 ## 🚀 Quick Start
 
@@ -117,7 +119,7 @@ python app/scripts/system_check.py
 ### Search Tool (`tools/search.py`)
 - **Source**: Bing Web Search API v7
 - **Function**: Web search for restaurants and local info
-- **Class**: `SearchTools` with `web_search(query, max_results)` method
+- **Class**: `SearchTools` with `travel_web_search(query, max_results)` method
 
 ### Card Tool (`tools/card.py`)
 - **Source**: In-memory rules engine
@@ -181,7 +183,6 @@ app/
 ├── memory.py              # Short-term memory system
 ├── long_term_memory.py    # Long-term memory with Cosmos DB
 ├── knowledge_base.py      # Knowledge base for card recommendations
-├── filters.py             # Kernel filters for error handling
 ├── tools/                 # Class-based tool implementations
 │   ├── weather.py         # WeatherTools class
 │   ├── fx.py              # FxTools class
@@ -192,8 +193,7 @@ app/
 │   ├── ingest.py          # Data ingestion
 │   └── retriever.py       # Vector search
 ├── eval/                  # Evaluation harness
-│   ├── judge.py           # Simple rule-based evaluation
-│   └── llm_judge.py       # Advanced LLM-based evaluation
+│   └── judge.py           # Simple rule-based evaluation
 ├── scripts/               # Utility scripts
 │   └── system_check.py    # Comprehensive system health check
 └── utils/                 # Utility modules
@@ -409,7 +409,7 @@ print(fx['rates']['EUR'])  # 85.81
 ```
 
 #### Search Tool
-**Class**: `SearchTools` with `web_search(query, max_results)` method
+**Class**: `SearchTools` with `travel_web_search(query, max_results)` method
 
 Search the web using Bing API.
 
@@ -418,7 +418,7 @@ Search the web using Bing API.
 from app.tools.search import SearchTools
 
 search_tool = SearchTools()
-results = search_tool.web_search("best restaurants Paris", 5)
+results = search_tool.travel_web_search("best restaurants Paris", 5)
 print(len(results))  # 5
 ```
 

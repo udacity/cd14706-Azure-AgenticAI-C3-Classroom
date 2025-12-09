@@ -1,41 +1,33 @@
 # app/tools/weather.py
 from semantic_kernel.functions import kernel_function
 import requests
+import json
+from app.utils.logger import setup_logger
+
+logger = setup_logger("weather_tool")
 
 class WeatherTools:
-    @kernel_function(name="get_weather", description="Get forecast from Open-Meteo")
-    def get_weather(self, lat: float, lon: float):
+    @kernel_function(name="get_weather", description="Get 7-day weather forecast for a given city.")
+    def get_weather(self, city: str) -> str:
         """
-        Get weather forecast for given coordinates.
-        
-        TODO: Implement weather data retrieval from Open-Meteo API
-        - Use the Open-Meteo API: https://api.open-meteo.com/v1/forecast
-        - Include daily weather data: weathercode, temperature_2m_max, temperature_2m_min
-        - Set forecast_days=7 and timezone=UTC
-        - Handle API errors gracefully
-        
-        Hint: Use requests.get() with proper error handling
+        Gets the 7-day weather forecast for a given city and returns a simple summary string.
+
+        TODO: Implement weather retrieval
+        - Geocoding API: https://geocoding-api.open-meteo.com/v1/search?name={city}&count=1
+          - Extract lat/lon from: response["results"][0]["latitude"], ["longitude"]
+        - Weather API: https://api.open-meteo.com/v1/forecast
+          - Parameters: latitude, longitude, daily=weathercode,temperature_2m_max,temperature_2m_min, forecast_days=7, timezone=UTC
+        - Weather codes: ≤1 = Sunny, ≤3 = Cloudy, >50 = Rainy, else Mixed
+        - Return a summary string with average temperature and conditions
         """
-        # TODO: Implement weather API call
+        logger.info(f"Weather tool called with city={city}")
+
+        # TODO: Implement geocoding to get lat/lon from city name
         # This is a placeholder - replace with actual implementation
-        try:
-            # TODO: Construct API URL with parameters
-            # TODO: Make API request
-            # TODO: Handle response and errors
-            # TODO: Return weather data as dictionary
-            
-            # Placeholder response
-            return {
-                "latitude": lat,
-                "longitude": lon,
-                "timezone": "UTC",
-                "daily": {
-                    "time": ["2026-06-01", "2026-06-02"],
-                    "temperature_2m_max": [25.0, 26.0],
-                    "temperature_2m_min": [15.0, 16.0],
-                    "weathercode": [1, 2]
-                }
-            }
-        except Exception as e:
-            # TODO: Implement proper error handling
-            return {"error": str(e)}
+
+        # TODO: Implement weather API call using coordinates
+        # This is a placeholder - replace with actual implementation
+
+        # TODO: Summarize weather data and return string
+        # This is a placeholder - replace with actual implementation
+        return json.dumps({"error": "Weather tool not implemented"})

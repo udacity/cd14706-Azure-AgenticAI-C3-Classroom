@@ -169,10 +169,12 @@ class TestTripPlan:
         assert plan.citations is not None
         assert len(plan.citations) == 1
     
-    def test_invalid_trip_plan_missing_required(self):
-        """Test that missing required fields raise ValidationError"""
-        with pytest.raises(ValidationError):
-            TripPlan(
-                destination="Paris"
-                # Missing travel_dates, card_recommendation, currency_info, next_steps
-            )
+    def test_trip_plan_with_defaults(self):
+        """Test that TripPlan uses default values when fields are omitted"""
+        plan = TripPlan(destination="Paris")
+        # Model now has defaults for all optional fields
+        assert plan.destination == "Paris"
+        assert plan.travel_dates == "N/A"  # default
+        assert plan.weather is None
+        assert plan.results is None
+        assert plan.next_steps == []  # default empty list

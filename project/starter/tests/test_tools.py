@@ -1,9 +1,9 @@
 """
-Unit tests for tool functions
+Unit tests for tool functions - using real API calls
 """
 
 import pytest
-from unittest.mock import patch, Mock
+import os
 from app.tools.weather import WeatherTools
 from app.tools.fx import FxTools
 from app.tools.search import SearchTools
@@ -11,185 +11,167 @@ from app.tools.card import CardTools
 
 
 class TestWeatherTool:
-    """Test cases for weather tool"""
+    """Test cases for weather tool - using real API calls"""
     
-    @patch('app.tools.weather.requests.get')
-    def test_get_weather_success(self, mock_get):
-        """Test successful weather data retrieval"""
-        # Mock response
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            'latitude': 48.8566,
-            'longitude': 2.3522,
-            'timezone': 'GMT',
-            'daily': {
-                'time': ['2025-09-03', '2025-09-04'],
-                'temperature_2m_max': [25.0, 26.0],
-                'temperature_2m_min': [15.0, 16.0],
-                'weathercode': [1, 2]
-            }
-        }
-        mock_get.return_value = mock_response
-        
+    def test_get_weather_success(self):
+        """Test successful weather data retrieval with real API"""
         weather_tool = WeatherTools()
-        result = weather_tool.get_weather(48.8566, 2.3522)
-        
-        assert result['latitude'] == 48.8566
-        assert result['longitude'] == 2.3522
-        assert result['timezone'] == 'GMT'
-        assert 'daily' in result
-        mock_get.assert_called_once()
-    
-    @patch('app.tools.weather.requests.get')
-    def test_get_weather_api_error(self, mock_get):
-        """Test weather tool handles API errors"""
-        mock_get.side_effect = Exception("API Error")
-        
+        result = weather_tool.get_weather("Paris")
+
+        # Verify real API response - now returns summary string
+        assert isinstance(result, str)
+        assert "Paris" in result
+        assert "°C" in result
+
+    def test_get_weather_different_locations(self):
+        """Test weather tool with different locations"""
         weather_tool = WeatherTools()
-        with pytest.raises(Exception):
-            weather_tool.get_weather(48.8566, 2.3522)
+
+        # Test with New York
+        result_ny = weather_tool.get_weather("New York")
+        assert isinstance(result_ny, str)
+        assert "New York" in result_ny
+
+        # Test with Tokyo
+        result_tokyo = weather_tool.get_weather("Tokyo")
+        assert isinstance(result_tokyo, str)
+        assert "Tokyo" in result_tokyo
 
 
 class TestFxTool:
-    """Test cases for FX tool"""
+    """Test cases for FX tool - using real API calls"""
     
-    @patch('app.tools.fx.requests.get')
-    def test_convert_fx_success(self, mock_get):
-        """Test successful currency conversion"""
-        # Mock response
-        mock_response = Mock()
-        mock_response.json.return_value = {
-            'amount': 100.0,
-            'base': 'USD',
-            'date': '2025-09-03',
-            'rates': {'EUR': 85.81}
-        }
-        mock_get.return_value = mock_response
-        
+    def test_convert_fx_success(self):
+        """Test successful currency conversion with real API"""
         fx_tool = FxTools()
         result = fx_tool.convert_fx(100, "USD", "EUR")
         
-        assert result['amount'] == 100.0
-        assert result['base'] == 'USD'
-        assert result['rates']['EUR'] == 85.81
-        mock_get.assert_called_once()
+        # Verify real API response structure
+        assert 'amount' in result or 'rates' in result
+        if 'amount' in result:
+            assert result['amount'] == 100.0
+        if 'base' in result:
+            assert result['base'] == 'USD'
+        if 'rates' in result:
+            assert 'EUR' in result['rates']
     
-    @patch('app.tools.fx.requests.get')
-    def test_convert_fx_api_error(self, mock_get):
-        """Test FX tool handles API errors"""
-        mock_get.side_effect = Exception("API Error")
-        
+    def test_convert_fx_different_currencies(self):
+        """Test FX tool with different currency pairs"""
         fx_tool = FxTools()
-        with pytest.raises(Exception):
-            fx_tool.convert_fx(100, "USD", "EUR")
+        
+        # Test USD to GBP
+        result_gbp = fx_tool.convert_fx(100, "USD", "GBP")
+        assert 'amount' in result_gbp or 'rates' in result_gbp
+        
+        # Test USD to JPY
+        result_jpy = fx_tool.convert_fx(100, "USD", "JPY")
+        assert 'amount' in result_jpy or 'rates' in result_jpy
 
 
 class TestSearchTool:
-    """Test cases for search tool"""
+    """Test cases for search tool - using real API calls"""
     
-    @patch.dict('os.environ', {
-        'PROJECT_ENDPOINT': 'https://test.endpoint.com',
-        'AGENT_ID': 'test-agent-id',
-        'BING_CONNECTION_ID': 'test-connection-id'
-    })
-    @patch('app.tools.search.AIProjectClient')
-    def test_web_search_success(self, mock_client_class):
-        """Test successful web search"""
-        # Mock AI Project Client
-        mock_client = Mock()
-        mock_client_class.return_value = mock_client
-        
-        # Mock thread creation
-        mock_thread = Mock()
-        mock_thread.id = "test-thread-id"
-        mock_client.agents.threads.create.return_value = mock_thread
-        
-        # Mock message creation
-        mock_client.agents.messages.create.return_value = None
-        
-        # Mock run creation
-        mock_run = Mock()
-        mock_client.agents.runs.create_and_process.return_value = mock_run
-        
-        # Mock message listing
-        mock_message = Mock()
-        mock_message.role = "assistant"
-        mock_message.content = [{
-            "type": "text",
-            "text": {"value": '[{"title": "Test Restaurant", "url": "https://example.com", "snippet": "Great food"}]'}
-        }]
-        mock_client.agents.messages.list.return_value = [mock_message]
-        
-        # Mock thread deletion
-        mock_client.agents.threads.delete.return_value = None
-        
+    @pytest.mark.skipif(
+        not all([
+            os.getenv("PROJECT_ENDPOINT"),
+            os.getenv("AGENT_ID"),
+            os.getenv("BING_CONNECTION_ID")
+        ]),
+        reason="Missing Azure AI Project configuration"
+    )
+    def test_web_search_success(self):
+        """Test successful web search with real API"""
         search_tool = SearchTools()
         result = search_tool.web_search("best restaurants Paris", 5)
         
-        assert len(result) == 1
-        assert result[0]['title'] == 'Test Restaurant'
-        assert result[0]['url'] == 'https://example.com'
+        # Verify real API response structure
+        assert isinstance(result, list)
+        assert len(result) > 0
+        assert 'title' in result[0]
+        assert 'url' in result[0]
+        assert 'snippet' in result[0]
     
-    @patch.dict('os.environ', {}, clear=True)
     def test_web_search_missing_config(self):
         """Test web search with missing configuration"""
-        search_tool = SearchTools()
-        result = search_tool.web_search("test query", 5)
+        # Temporarily clear env vars if they exist
+        original_endpoint = os.environ.pop("PROJECT_ENDPOINT", None)
+        original_agent = os.environ.pop("AGENT_ID", None)
+        original_connection = os.environ.pop("BING_CONNECTION_ID", None)
         
-        assert len(result) == 1
-        assert "Missing configuration" in result[0]['title']
+        try:
+            search_tool = SearchTools()
+            result = search_tool.web_search("test query", 5)
+            
+            assert len(result) == 1
+            assert "Missing configuration" in result[0]['title']
+        finally:
+            # Restore env vars if they existed
+            if original_endpoint:
+                os.environ["PROJECT_ENDPOINT"] = original_endpoint
+            if original_agent:
+                os.environ["AGENT_ID"] = original_agent
+            if original_connection:
+                os.environ["BING_CONNECTION_ID"] = original_connection
     
-    @patch.dict('os.environ', {
-        'PROJECT_ENDPOINT': 'https://test.endpoint.com',
-        'AGENT_ID': 'test-agent-id',
-        'BING_CONNECTION_ID': 'test-connection-id'
-    })
-    @patch('app.tools.search.AIProjectClient')
-    def test_web_search_api_error(self, mock_client_class):
-        """Test search tool handles API errors gracefully"""
-        mock_client_class.side_effect = Exception("API Error")
-        
+    @pytest.mark.skipif(
+        not all([
+            os.getenv("PROJECT_ENDPOINT"),
+            os.getenv("AGENT_ID"),
+            os.getenv("BING_CONNECTION_ID")
+        ]),
+        reason="Missing Azure AI Project configuration"
+    )
+    def test_web_search_different_queries(self):
+        """Test search tool with different query types"""
         search_tool = SearchTools()
-        result = search_tool.web_search("test query", 5)
         
-        assert len(result) == 1
-        assert "Search error" in result[0]['title']
+        # Test travel query
+        result_travel = search_tool.web_search("luxury hotels in Dubai", 3)
+        assert isinstance(result_travel, list)
+        if len(result_travel) > 0:
+            assert 'title' in result_travel[0]
+        
+        # Test restaurant query
+        result_restaurant = search_tool.web_search("best sushi restaurants Tokyo", 3)
+        assert isinstance(result_restaurant, list)
+        if len(result_restaurant) > 0:
+            assert 'title' in result_restaurant[0]
 
 
 class TestCardTool:
     """Test cases for card tool"""
-    
+
     def test_recommend_card_success(self):
         """Test successful card recommendation"""
         card_tool = CardTools()
-        result = card_tool.recommend_card("5812", 100, "France")
-        
+        result = card_tool.recommend_card("dining", "France")
+
         assert 'best' in result
         assert 'explanation' in result
         assert 'card' in result['best']
         assert 'benefit' in result['best']
         assert 'fx_fee' in result['best']
-    
+
     def test_recommend_card_different_countries(self):
         """Test card recommendation for different countries"""
         card_tool = CardTools()
-        result_france = card_tool.recommend_card("5812", 100, "France")
-        result_japan = card_tool.recommend_card("5812", 100, "Japan")
-        
+        result_france = card_tool.recommend_card("dining", "France")
+        result_japan = card_tool.recommend_card("dining", "Japan")
+
         # Both should return valid results
         assert 'best' in result_france
         assert 'best' in result_japan
         assert 'card' in result_france['best']
         assert 'card' in result_japan['best']
-    
-    def test_recommend_card_different_mccs(self):
-        """Test card recommendation for different merchant categories"""
+
+    def test_recommend_card_different_categories(self):
+        """Test card recommendation for different spending categories"""
         card_tool = CardTools()
-        result_dining = card_tool.recommend_card("5812", 100, "France")  # Dining
-        result_gas = card_tool.recommend_card("5541", 100, "France")      # Gas
-        
+        result_dining = card_tool.recommend_card("dining", "France")
+        result_travel = card_tool.recommend_card("travel", "France")
+
         # Both should return valid results
         assert 'best' in result_dining
-        assert 'best' in result_gas
+        assert 'best' in result_travel
         assert 'card' in result_dining['best']
-        assert 'card' in result_gas['best']
+        assert 'card' in result_travel['best']

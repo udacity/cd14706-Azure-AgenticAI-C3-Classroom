@@ -1,116 +1,108 @@
 import csv
-from app.main import run_request
+import json
+import asyncio
+from app.main import run_request, create_kernel
+from app.eval.llm_judge import LLMJudge
 from pydantic import ValidationError
 
 # Define test scenarios
 TEST_CASES = [
     {
         "name": "Test 1",
-        "input":{
-            "destination": "Paris",
-            "travel_dates": "2026-06-01 to 2026-06-08",
-            "card": "BankGold"
-        }
+        "query": "Plan a trip to Paris from June 1-8, 2026. I have a BankGold card."
     },
     {
         "name": "Test 2",
-        "input":{
-            "destination": "Tokyo",
-            "travel_dates": "2026-07-10 to 2026-07-17",
-            "card": "BankGold"
-        }
+        "query": "Plan a trip to Tokyo from July 10-17, 2026. I have a BankGold card."
     },
     {
         "name": "Test 3",
-        "input":{
-            "destination": "Barcelona",
-            "travel_dates": "2026-08-15 to 2026-08-22",
-            "card": "BankGold"
-        }
+        "query": "Plan a trip to Barcelona from August 15-22, 2026. I have a BankGold card."
     }
 ]
 
-def evaluate(case):
-    """
-    Evaluate a test case by running the agent and checking the output.
-    
-    TODO: Implement this function to:
-    1. Run the agent with the test case input
-    2. Parse the JSON response
-    3. Validate the response structure
-    4. Check for required fields and data quality
-    5. Return evaluation results
-    
-    Args:
-        case: Test case dictionary with input parameters
-        
-    Returns:
-        Dictionary with evaluation results
-        
-    Hints:
-    - Use run_request() to get agent response
-    - Parse JSON and validate with Pydantic
-    - Check for citations, card recommendations, etc.
-    - Handle errors gracefully
-    """
+async def evaluate(case, judge):
+    """Evaluate a test case using LLM-as-Judge"""
     try:
-        # TODO: Implement evaluation logic
-        # 1. Run the agent
-        # 2. Parse and validate response
-        # 3. Check for required fields
-        # 4. Return evaluation results
-        
-        # For now, return mock evaluation
+        print(f"\n🔄 Running agent for: {case['name']}")
+        response = await run_request(case["query"])
+
+        # Parse response
+        response_data = json.loads(response)
+        structured_output = response_data.get("trip_plan", {})
+        citations = structured_output.get("citations", []) or []
+
+        print(f"✅ Agent response received")
+
+        # LLM-as-Judge evaluation
+        print(f"⚖️ Running LLM-as-Judge evaluation...")
+        # TODO: Call judge.evaluate_response() with query, response, structured_output, tool_calls, citations
+        # This is a placeholder - replace with actual implementation
+        result = None
+
         return {
-            "valid_json": True,
-            "has_citations": True,
-            "card_mentioned": True
-        }
-    except (ValidationError, Exception) as e:
-        print(f"❌ Failed to parse agent output: {e}")
-        return {
-            "valid_json": False,
-            "has_citations": False,
-            "card_mentioned": False
+            "name": case["name"],
+            "query": case["query"],
+            "overall_score": result.overall_score,
+            "passed": result.passed,
+            "accuracy": result.criteria_scores.get("accuracy", 0),
+            "completeness": result.criteria_scores.get("completeness", 0),
+            "relevance": result.criteria_scores.get("relevance", 0),
+            "tool_usage": result.criteria_scores.get("tool_usage", 0),
+            "reasoning": result.reasoning[:200] + "..." if len(result.reasoning) > 200 else result.reasoning
         }
 
-def main():
-    """
-    Main evaluation function that runs all test cases and saves results.
-    
-    TODO: Implement this function to:
-    1. Run all test cases
-    2. Collect evaluation results
-    3. Save results to CSV file
-    4. Print summary statistics
-    
-    Hints:
-    - Iterate through TEST_CASES
-    - Call evaluate() for each case
-    - Write results to CSV file
-    - Print summary statistics
-    """
+    except Exception as e:
+        print(f"❌ Evaluation failed: {e}")
+        return {
+            "name": case["name"],
+            "query": case["query"],
+            "overall_score": 0,
+            "passed": False,
+            "accuracy": 0,
+            "completeness": 0,
+            "relevance": 0,
+            "tool_usage": 0,
+            "reasoning": f"Error: {e}"
+        }
+
+async def main():
+    print("🏥 Travel Concierge Agent - LLM-as-Judge Evaluation")
+    print("=" * 60)
+
+    # Create kernel and judge
+    kernel = create_kernel()
+    judge = LLMJudge(kernel)
+
     results = []
-    
-    # TODO: Implement main evaluation logic
-    # 1. Run all test cases
-    # 2. Collect results
-    # 3. Save to CSV
-    # 4. Print summary
-    
+    passed_count = 0
+
     for case in TEST_CASES:
-        print(f"Running test: {case['name']}")
-        outcome = evaluate(case)
-        print(f"Test outcome: {outcome}")
-        results.append({**case["input"], **outcome})
-    
+        outcome = await evaluate(case, judge)
+        results.append(outcome)
+
+        # Print result
+        status = "✅ PASS" if outcome["passed"] else "❌ FAIL"
+        print(f"\n{status} {outcome['name']}: {outcome['overall_score']:.1f}/5")
+        print(f"   Accuracy: {outcome['accuracy']}, Completeness: {outcome['completeness']}")
+        print(f"   Relevance: {outcome['relevance']}, Tool Usage: {outcome['tool_usage']}")
+
+        if outcome["passed"]:
+            passed_count += 1
+
+    # Summary
+    print("\n" + "=" * 60)
+    print(f"📊 Summary: {passed_count}/{len(TEST_CASES)} tests passed")
+    print(f"   Average Score: {sum(r['overall_score'] for r in results) / len(results):.2f}/5")
+
     # Write results to CSV
     with open("app/eval/results.csv", "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(results[0].keys()))
+        fieldnames = ["name", "query", "overall_score", "passed", "accuracy", "completeness", "relevance", "tool_usage", "reasoning"]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(results)
 
-    print("Evaluation complete. Results saved to eval/results.csv")
+    print("\n✅ Results saved to app/eval/results.csv")
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

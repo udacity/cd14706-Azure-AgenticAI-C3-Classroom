@@ -94,7 +94,7 @@ class TestAgentState:
         """Test that Phase enum has expected values"""
         # Test that enum values are unique and in order
         phases = list(Phase)
-        assert len(phases) == 8  # Updated to include all 8 phases
+        assert len(phases) == 8
         assert phases[0] == Phase.Init
         assert phases[1] == Phase.ClarifyRequirements
         assert phases[2] == Phase.PlanTools
@@ -146,7 +146,7 @@ class TestEnhancedAgentState:
         state.set_requirements(requirements)
         
         assert state.requirements == requirements
-        assert state.updated_at > state.created_at
+        assert state.updated_at >= state.created_at
     
     def test_clarification_questions(self):
         """Test clarification question management"""

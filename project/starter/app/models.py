@@ -33,11 +33,11 @@ class CurrencyInfo(BaseModel):
 
 
 class TripPlan(BaseModel):
-    destination: str
-    travel_dates: str
+    destination: str = "N/A"
+    travel_dates: str = "N/A"
     weather: Optional[Weather] = None
     results: Optional[List[SearchResult]] = None
-    card_recommendation: CardRecommendation
-    currency_info: CurrencyInfo
+    card_recommendation: Optional[CardRecommendation] = None
+    currency_info: Optional[CurrencyInfo] = None
     citations: Optional[List[str]] = None
-    next_steps: List[str]
+    next_steps: List[str] = []
